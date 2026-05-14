@@ -30,14 +30,36 @@ export function PageShell({ children, header, footer }: PageShellProps) {
             top: 0,
             zIndex: 10,
             width: '100%',
-            background: 'rgba(244, 244, 245, 0.85)',
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)',
-            borderBottom: '1px solid var(--sp-border-subtle)',
           }}
         >
+          {/*
+           * Glass layer with top-heavy blur that fades out toward the bottom.
+           * Sits behind the header content; pointer-events disabled so taps pass through.
+           * Extends a few pixels below the band so the fade dissolves into the page
+           * rather than terminating on a hard edge.
+           */}
+          <div
+            aria-hidden
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: '-12px',
+              pointerEvents: 'none',
+              background:
+                'linear-gradient(to bottom, rgba(244, 244, 245, 0.88) 0%, rgba(244, 244, 245, 0.55) 60%, rgba(244, 244, 245, 0) 100%)',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              maskImage:
+                'linear-gradient(to bottom, #000 0%, #000 45%, rgba(0,0,0,0.6) 75%, rgba(0,0,0,0) 100%)',
+              WebkitMaskImage:
+                'linear-gradient(to bottom, #000 0%, #000 45%, rgba(0,0,0,0.6) 75%, rgba(0,0,0,0) 100%)',
+            }}
+          />
           <div
             style={{
+              position: 'relative',
               maxWidth: 'var(--sp-max-width)',
               margin: '0 auto',
               padding: '12px 16px',
