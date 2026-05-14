@@ -1,0 +1,202 @@
+import { useEffect, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Pill } from './Pill';
+
+const STORAGE_KEY = 'sp:seen-intro';
+
+const STEPS = [
+  {
+    overline: 'Step 1',
+    title: 'Pick a market',
+    body:
+      "Yellow cards. VAR overturns. Attendance. Pick any World Cup market that pulls you in.",
+    badge: { bg: '#FEF3C7', fg: '#D97706', emoji: '⚽' },
+  },
+  {
+    overline: 'Step 2',
+    title: 'Aim, time, kick',
+    body:
+      "Lock the aim where you want to score. Time the kick inside the sweet spot for conviction. Wind adds character — the worse your timing, the more it nudges you.",
+    badge: { bg: '#FFEDD5', fg: '#EA580C', emoji: '🎯' },
+  },
+  {
+    overline: 'Step 3',
+    title: 'Stack kicks for a richer call',
+    body:
+      "Take up to 5 kicks. Each one adds a region to your belief. Aim where the goalkeeper (the crowd) is faded for a bigger potential payout.",
+    badge: { bg: '#FCE7F3', fg: '#DB2777', emoji: '🔥' },
+  },
+];
+
+interface IntroSheetProps {
+  /** When true, never show (and clear localStorage). For testing. */
+  forceShow?: boolean;
+}
+
+/**
+ * First-time bottom-sheet that introduces the kick mechanic in three cards.
+ * Persists a localStorage flag so it only appears once per device.
+ */
+export function IntroSheet({ forceShow = false }: IntroSheetProps) {
+  const [open, setOpen] = useState(false);
+  const [step, setStep] = useState(0);
+
+  useEffect(() => {
+    try {
+      const seen = localStorage.getItem(STORAGE_KEY);
+      if (!seen || forceShow) setOpen(true);
+    } catch {
+      // localStorage may be disabled — show by default
+      setOpen(true);
+    }
+  }, [forceShow]);
+
+  const close = () => {
+    try {
+      localStorage.setItem(STORAGE_KEY, '1');
+    } catch {
+      /* ignore */
+    }
+    setOpen(false);
+  };
+
+  const handleNext = () => {
+    if (step < STEPS.length - 1) setStep(step + 1);
+    else close();
+  };
+
+  const current = STEPS[step];
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          onClick={close}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 15, 16, 0.45)',
+            backdropFilter: 'blur(4px)',
+            WebkitBackdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'flex-end',
+            justifyContent: 'center',
+            zIndex: 100,
+            padding: '16px',
+          }}
+        >
+          <motion.div
+            initial={{ y: 60, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 80, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 320, damping: 32 }}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '100%',
+              maxWidth: '420px',
+              background: 'var(--sp-surface)',
+              borderRadius: 'var(--sp-radius-lg)',
+              boxShadow: '0 -8px 32px rgb(0 0 0 / 0.18)',
+              padding: '24px 20px',
+              paddingBottom: 'calc(20px + env(safe-area-inset-bottom))',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '20px',
+              }}
+            >
+              <div style={{ display: 'flex', gap: '6px' }}>
+                {STEPS.map((_, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      width: i === step ? '20px' : '6px',
+                      height: '6px',
+                      borderRadius: '999px',
+                      background:
+                        i === step
+                          ? 'var(--sp-primary)'
+                          : i < step
+                          ? 'var(--sp-text-muted)'
+                          : 'var(--sp-border)',
+                      transition: 'all 0.3s var(--sp-ease)',
+                    }}
+                  />
+                ))}
+              </div>
+              <button
+                onClick={close}
+                style={{
+                  fontSize: '12px',
+                  color: 'var(--sp-text-secondary)',
+                  fontWeight: 500,
+                }}
+              >
+                Skip
+              </button>
+            </div>
+
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={step}
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.25 }}
+              >
+                <div
+                  style={{
+                    width: '64px',
+                    height: '64px',
+                    borderRadius: '999px',
+                    background: current.badge.bg,
+                    color: current.badge.fg,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '32px',
+                    marginBottom: '16px',
+                  }}
+                >
+                  {current.badge.emoji}
+                </div>
+                <div className="sp-uppercase sp-secondary" style={{ marginBottom: '6px' }}>
+                  {current.overline}
+                </div>
+                <div
+                  className="sp-display"
+                  style={{
+                    fontSize: '26px',
+                    lineHeight: 1.15,
+                    marginBottom: '10px',
+                    letterSpacing: '-0.02em',
+                  }}
+                >
+                  {current.title}
+                </div>
+                <div
+                  className="sp-secondary"
+                  style={{ fontSize: '14px', lineHeight: 1.55, marginBottom: '24px' }}
+                >
+                  {current.body}
+                </div>
+              </motion.div>
+            </AnimatePresence>
+
+            <Pill variant="primary" size="lg" fullWidth onClick={handleNext}>
+              {step < STEPS.length - 1 ? 'Next' : "Let's kick"}
+            </Pill>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}

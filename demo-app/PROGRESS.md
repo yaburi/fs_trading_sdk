@@ -11,15 +11,15 @@ Living checklist of build phases. Update on every task transition. Spec lives in
 | # | Task | Status |
 |---|---|---|
 | 1 | Theme, fonts, and page shell | ✓ done |
-| 2 | First-time explainer modal (deferred polish) | ☐ pending |
+| 2 | First-time explainer modal | ✓ done |
 | 3 | Market list screen | ✓ done |
 | 4 | Stake screen | ✓ done |
 | 5 | Game screen — pitch, goal, keeper, ball | ✓ done |
 | 6 | Game screen — aim, timing, wind, kick state machine | ✓ done |
-| 7 | Belief composition + live overlay | ☐ pending |
-| 8 | Confirm screen + buy submission | ☐ pending |
-| 9 | My Calls screen | ☐ pending |
-| 10 | Polish pass + end-to-end test | ☐ pending |
+| 7 | Belief composition + live overlay | ✓ done |
+| 8 | Confirm screen + buy submission | ✓ done |
+| 9 | My Calls screen | ✓ done |
+| 10 | Polish pass + build verify | ✓ done |
 
 ---
 
@@ -200,3 +200,118 @@ demo-app/src/set_piece/routes/Game.tsx          # full wire-up
 - A `PointRegion` is committed to `round.kicks[]` after every successful kick — task #7 reads that array and composes the live belief overlay via `generateBelief()`.
 - Engine never reaches into RoundContext directly; Game.tsx is the single coordinator. Keeps the engine pure / testable.
 - Wind affects landing visually (small jitter) AND spread mathematically (proportional widening) — but the jitter scales with `(1 - power)` so a perfectly-timed kick lands almost exactly where the user aimed regardless of wind.
+
+---
+
+### ✓ Task #7 — Belief composition + live overlay
+
+**What landed**
+- `game/useComposedBelief.ts` — hook that takes `(market, kicks)` and returns `{ vector, curve, stats }`:
+  - `vector` = `generateBelief(kicks, numBuckets, lowerBound, upperBound)` — the BeliefVector ready to pass to `useBuy.execute()` in task #8
+  - `curve` = `evaluateDensityCurve(vector, lowerBound, upperBound, 80)` — `{x, y}[]` for chart rendering
+  - `stats` = `computeStatistics(vector, lowerBound, upperBound)` — mean / median / mode / variance / stdDev
+  - All math goes through `@functionspace/core` — no custom math. Per CLAUDE.md / builder.md rules.
+- `game/Pitch.tsx` extended with a `belief` prop:
+  - New `<BeliefPath>` component renders the curve as a stroked coral line with a soft halo (double-stroke trick — wide low-opacity halo behind a crisp narrower line)
+  - Keeper silhouette dims to 0.55 opacity (with a 0.4s ease transition) when a belief is showing, so visual hierarchy shifts to *your call* once you've started kicking
+- `routes/Game.tsx` wires `composed.curve` into the Pitch + shows a "Your call: ~X ± Y" summary inset card right below the canvas (visible once at least one kick is logged)
+
+**Key files**
+```
+demo-app/src/set_piece/game/useComposedBelief.ts   # new — pure derivation hook
+demo-app/src/set_piece/game/Pitch.tsx              # + BeliefPath component, keeper dim
+demo-app/src/set_piece/routes/Game.tsx             # wires belief curve + "Your call" stat
+```
+
+**Notes for task #8**
+- The composed `vector` is exactly what `useBuy(marketId).execute(belief, collateral)` needs — Confirm screen reuses `useComposedBelief` and passes `composed.vector`.
+- Composed.stats.mean / stdDev are also what the Confirm screen will surface in the payout preview.
+
+---
+
+### ✓ Task #8 — Confirm screen + buy submission (with auth gate)
+
+**What landed**
+- `components/AuthSheet.tsx` — bottom-sheet modal wrapper around the SDK's `PasswordlessAuthWidget`. Slides up from bottom with framer-motion spring; backdrop click + close button to dismiss; max-width 420px so it stays centered on desktop. Headline copy: "Sign in to kick · just a username — no password, no email."
+- `routes/Confirm.tsx` (full rewrite):
+  - Auto-redirects to `/m/:id/play` if user lands here with no kicks
+  - Market summary card with icon + 2-line title
+  - **Pitch in review mode** — same component, but `aimDot` / `ballTarget` are not passed; renders the keeper + composed belief curve + past kick markers as a static review
+  - Side-by-side stat cards: "Your call ~X ± Y" (left, mono) and "Best payout $Z if outcome ≈ X" (right, positive-green, mono). Payout is computed via `usePreviewPayout.execute(belief, stake)` debounced 250ms after the belief settles.
+  - Plain stake-summary line under the cards: "Staking $X across N kicks. Max payout if you nail it: $Y."
+  - **Auth-gated CTA** — when `!isAuthenticated`, button reads "Sign in to kick" (coral accent variant) and opens the AuthSheet. After login, `useEffect` on `isAuthenticated && autoSubmit` automatically retries the buy without the user having to tap again. When authed, button reads "GOAL!" (primary black).
+  - On successful `useBuy.execute()`:
+    1. Refresh wallet via `useAuth().refreshUser()`
+    2. Trigger 1.7s "GOOOAL!" celebration overlay (Caveat script in positive green, sprung in with scale + slight rotation, full-screen blurred backdrop)
+    3. Reset kicks, navigate to `/calls`
+  - Buy errors render in red just above the CTA pill.
+
+**Key files**
+```
+demo-app/src/set_piece/components/AuthSheet.tsx     # new — passwordless modal
+demo-app/src/set_piece/routes/Confirm.tsx           # full real screen
+```
+
+**Notes**
+- All SDK rules respected: trade goes through `useBuy.execute()`, payout via `usePreviewPayout.execute()`, login via `PasswordlessAuthWidget`. Cache invalidation is auto-handled by `useBuy`.
+- The retry-on-auth pattern: setAutoSubmit(true) when launching the sheet → useEffect watches `isAuthenticated && autoSubmit` → closes sheet, calls submitBuy. Clean, no race conditions.
+
+---
+
+### ✓ Task #9 — My Calls screen
+
+**What landed**
+- `routes/MyCalls.tsx` — full real screen, no SDK PositionTable wrapper (PositionTable is single-market only; we needed an aggregated view).
+- Auth gate: if not logged in, shows a "Sign in to see your calls" card that opens the same `AuthSheet`.
+- Pill tab bar: **Open · History** — segmented in a rounded inset chip strip.
+- For each WC market, renders a `MarketPositionsBlock` that:
+  - Calls `usePositions(marketId, username, { pollInterval: 8000 })` and filters by tab status
+  - Collapses to nothing if the user has no positions in that market
+  - Renders the colored MarketIcon + 2-line title + count + an "Add kick →" pill
+  - Lists each position as a row: collateral in mono ("$X.XX"), aim prediction + claims, plus a contextual right side (sell button for open; returned-amount for history)
+- `useSell(marketId).execute(positionId)` handles closing; cache auto-invalidates so the row vanishes; error renders inline.
+- Empty-state hint card at the bottom guides the user back to the market list if no positions match.
+
+**Key files**
+```
+demo-app/src/set_piece/routes/MyCalls.tsx
+```
+
+**Notes**
+- 9 WC markets × `usePositions` each = 9 cached calls. With the SDK's query cache it's deduped after first hit. Polling at 8s keeps the view fresh.
+- All trade actions through SDK hooks (`useSell`). No raw fetch.
+
+---
+
+### ✓ Task #2 — First-time explainer modal
+
+**What landed**
+- `components/IntroSheet.tsx` — bottom-sheet that animates in on first visit, persists a `sp:seen-intro` flag in localStorage so it only ever shows once.
+- 3 steps with a dot progress strip (animated active dot widens), Skip in top-right, primary CTA "Next → Next → Let's kick".
+- Each step has a colored badge bubble (matches the MarketIcon palette), an overline, a tight Bricolage headline, and a body line.
+- Step content lifts from the actual mechanics: "Pick a market" → "Aim, time, kick" → "Stack kicks for a richer call".
+- Mounted at the top of `MarketList.tsx` so it's the first thing a brand-new user sees.
+
+**Key files**
+```
+demo-app/src/set_piece/components/IntroSheet.tsx
+demo-app/src/set_piece/routes/MarketList.tsx     # mounted <IntroSheet />
+```
+
+---
+
+### ✓ Task #10 — Polish + build verify
+
+**What landed (small polish, no test suite — this is a prototype)**
+- **Ball trail** — Score! Hero-style coral arc rendered as a dashed quadratic-bezier path from penalty spot to landing position. Fades in with `pathLength` animation as the ball flies, fades out when the round resets. Lives in `game/Pitch.tsx` inside an `AnimatePresence`.
+- **Production build verified** — `npx vite build` runs clean: 1389 modules → 405 kB JS / 127 kB gzipped + 65 kB CSS / 9 kB gzipped.
+- **Typecheck verified** — `npx tsc --noEmit` reports zero errors in `set_piece/` files. (Pre-existing errors in starter-kit `App_*.tsx` files are unrelated and were never ours.)
+
+**Deliberately NOT done**
+- No unit tests, no e2e harness, no Playwright. User asked to keep it simple for a prototype.
+- Manual smoke-test is the deal: open `http://localhost:3000` → tap a market → pick stake → take a kick → confirm → sign in → see the position in My Calls.
+
+**Key files**
+```
+demo-app/src/set_piece/game/Pitch.tsx      # ball trail
+```

@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import type { MarketState, ConsensusCurve, PointRegion } from '@functionspace/core';
 
 /**
@@ -45,6 +45,10 @@ export interface BallTarget {
   x: number;
 }
 
+export interface BeliefCurve {
+  points: { x: number; y: number }[];
+}
+
 interface PitchProps {
   market: MarketState;
   consensus: ConsensusCurve | null;
@@ -52,6 +56,8 @@ interface PitchProps {
   aimDot?: { x: number; locked: boolean } | null;
   /** Previously-landed kicks rendered as small coral markers on the goal-line. */
   kicks?: PointRegion[];
+  /** Composed-belief density curve, drawn as a coral line over the goal mouth. */
+  belief?: BeliefCurve | null;
   /** When set, the ball animates from the penalty spot to this position. */
   ballTarget?: BallTarget | null;
   /** Called when the flying ball reaches its target. */
@@ -63,6 +69,7 @@ export function Pitch({
   consensus,
   aimDot,
   kicks = [],
+  belief,
   ballTarget,
   onBallSettled,
 }: PitchProps) {
@@ -129,6 +136,7 @@ export function Pitch({
             points={consensus.points}
             lowerBound={lowerBound}
             upperBound={upperBound}
+            dim={belief != null && belief.points.length > 1}
           />
         ) : null}
 
@@ -226,6 +234,36 @@ export function Pitch({
           {fmt(upperBound)}
         </text>
 
+        {/* Ball trail — Score! Hero-style coral arc when the ball is in flight */}
+        <AnimatePresence>
+          {ballTarget && (
+            <motion.path
+              key="trail"
+              d={`M ${PITCH.ballX} ${PITCH.ballY} Q ${
+                (PITCH.ballX + aimToPixelX(ballTarget.x)) / 2
+              } ${PITCH.goalTop - 12} ${aimToPixelX(ballTarget.x)} ${PITCH.goalBottom}`}
+              fill="none"
+              stroke="var(--sp-accent)"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeDasharray="3 5"
+              initial={{ opacity: 0, pathLength: 0 }}
+              animate={{ opacity: 0.65, pathLength: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.4, ease: 'easeOut' }}
+            />
+          )}
+        </AnimatePresence>
+
+        {/* Composed belief curve (your prediction) — sits above keeper, under frame */}
+        {belief && belief.points.length > 1 ? (
+          <BeliefPath
+            points={belief.points}
+            lowerBound={lowerBound}
+            upperBound={upperBound}
+          />
+        ) : null}
+
         {/* Past kick markers (from prior kicks this round) */}
         {kicks.map((k, i) => {
           const px = outcomeToPixelX(k.center, lowerBound, upperBound);
@@ -288,9 +326,10 @@ interface KeeperPathProps {
   points: { x: number; y: number }[];
   lowerBound: number;
   upperBound: number;
+  dim?: boolean;
 }
 
-function KeeperPath({ points, lowerBound, upperBound }: KeeperPathProps) {
+function KeeperPath({ points, lowerBound, upperBound, dim }: KeeperPathProps) {
   const inRange = points.filter((p) => p.x >= lowerBound && p.x <= upperBound);
   if (inRange.length === 0) return null;
   const maxY = Math.max(...inRange.map((p) => p.y));
@@ -305,5 +344,59 @@ function KeeperPath({ points, lowerBound, upperBound }: KeeperPathProps) {
   }
   d += ` L ${PITCH.goalRight} ${PITCH.goalBottom} Z`;
 
-  return <path d={d} fill="url(#keeperGradient)" />;
+  return (
+    <path
+      d={d}
+      fill="url(#keeperGradient)"
+      opacity={dim ? 0.55 : 1}
+      style={{ transition: 'opacity 0.4s var(--sp-ease)' }}
+    />
+  );
+}
+
+interface BeliefPathProps {
+  points: { x: number; y: number }[];
+  lowerBound: number;
+  upperBound: number;
+}
+
+function BeliefPath({ points, lowerBound, upperBound }: BeliefPathProps) {
+  const inRange = points.filter((p) => p.x >= lowerBound && p.x <= upperBound);
+  if (inRange.length < 2) return null;
+  const maxY = Math.max(...inRange.map((p) => p.y));
+  if (!isFinite(maxY) || maxY <= 0) return null;
+
+  const yFor = (density: number) =>
+    PITCH.goalBottom - (density / maxY) * PITCH.keeperMaxHeight;
+
+  const d = inRange
+    .map(
+      (p, i) =>
+        `${i === 0 ? 'M' : 'L'} ${outcomeToPixelX(p.x, lowerBound, upperBound).toFixed(2)} ${yFor(p.y).toFixed(2)}`,
+    )
+    .join(' ');
+
+  return (
+    <g>
+      {/* Soft halo */}
+      <path
+        d={d}
+        stroke="var(--sp-accent)"
+        strokeWidth="6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+        opacity="0.18"
+      />
+      {/* Crisp line */}
+      <path
+        d={d}
+        stroke="var(--sp-accent)"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+    </g>
+  );
 }

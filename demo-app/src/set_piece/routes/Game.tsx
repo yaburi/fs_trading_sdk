@@ -10,6 +10,7 @@ import { Pitch } from '../game/Pitch';
 import { useKickEngine } from '../game/useKickEngine';
 import { TimingMeter } from '../game/TimingMeter';
 import { WindChip } from '../game/WindChip';
+import { useComposedBelief } from '../game/useComposedBelief';
 import { useRound, ROUND_CONSTANTS } from '../state/RoundContext';
 
 export default function Game() {
@@ -19,6 +20,7 @@ export default function Game() {
   const { consensus } = useConsensus(marketId ?? '', 80);
   const round = useRound();
   const engine = useKickEngine(market);
+  const composed = useComposedBelief(market, round.kicks, 80);
   const kicksRemaining = ROUND_CONSTANTS.MAX_KICKS - round.kicks.length;
 
   // After ball lands, hold briefly so the user sees the kick on the goal-line,
@@ -135,6 +137,7 @@ export default function Game() {
             consensus={consensus}
             aimDot={aimDot}
             kicks={round.kicks}
+            belief={composed?.curve ?? null}
             ballTarget={ballTarget}
             onBallSettled={engine.onLanded}
           />
@@ -166,6 +169,54 @@ export default function Game() {
           aimX={engine.aimX}
         />
       </div>
+
+      {/* Composed belief summary — appears after first kick */}
+      {composed && market && (
+        <Card padding="md" tone="inset">
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px',
+            }}
+          >
+            <div>
+              <div className="sp-uppercase sp-secondary" style={{ marginBottom: '2px' }}>
+                Your call
+              </div>
+              <div className="sp-display-md" style={{ fontSize: '20px' }}>
+                <span className="sp-mono">
+                  ~
+                  {composed.stats.mean.toLocaleString(undefined, {
+                    minimumFractionDigits: market.decimals ?? 0,
+                    maximumFractionDigits: market.decimals ?? 0,
+                  })}
+                </span>
+                {market.xAxisUnits && (
+                  <span
+                    className="sp-secondary"
+                    style={{ fontSize: '13px', marginLeft: '6px' }}
+                  >
+                    {market.xAxisUnits}
+                  </span>
+                )}
+              </div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div className="sp-uppercase sp-secondary" style={{ marginBottom: '2px' }}>
+                Confidence
+              </div>
+              <div className="sp-mono" style={{ fontSize: '13px' }}>
+                ±{composed.stats.stdDev.toLocaleString(undefined, {
+                  minimumFractionDigits: market.decimals ?? 0,
+                  maximumFractionDigits: (market.decimals ?? 0) + 1,
+                })}
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Timing meter (visible during the timing phase) */}
       {showTiming && (

@@ -4,6 +4,7 @@ import { PageShell } from '../components/PageShell';
 import { Header } from '../components/Header';
 import { Card } from '../components/Card';
 import { MarketRow } from '../components/MarketRow';
+import { IntroSheet } from '../components/IntroSheet';
 
 export default function MarketList() {
   const navigate = useNavigate();
@@ -16,6 +17,7 @@ export default function MarketList() {
 
   return (
     <PageShell header={<Header />}>
+      <IntroSheet />
       <div>
         <h1
           className="sp-display"
