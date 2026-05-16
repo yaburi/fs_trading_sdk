@@ -1,8 +1,35 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Pill } from './Pill';
 
 const STORAGE_KEY = 'sp:seen-intro';
+
+/** Crafted glyphs matching MarketIcon's stroke language (1.8 round-cap). */
+const glyphPick: ReactNode = (
+  <g fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="5" y="8" width="14" height="12" rx="2.5" />
+    <path d="M8 5h11M7 6.5h12" />
+    <path d="M9 14l2 2 4.5-4.5" />
+  </g>
+);
+
+const glyphAim: ReactNode = (
+  <g fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="8" />
+    <circle cx="12" cy="12" r="4.5" />
+    <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
+    <path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22" />
+  </g>
+);
+
+const glyphStack: ReactNode = (
+  <g fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3.5 18 C 6.5 18, 7.5 7, 12 7 C 16.5 7, 17.5 18, 20.5 18" />
+    <circle cx="7.5" cy="14" r="1.5" fill="currentColor" stroke="none" />
+    <circle cx="12" cy="7.5" r="1.8" fill="currentColor" stroke="none" />
+    <circle cx="16.5" cy="14" r="1.5" fill="currentColor" stroke="none" />
+  </g>
+);
 
 const STEPS = [
   {
@@ -10,21 +37,21 @@ const STEPS = [
     title: 'Pick a market',
     body:
       "Yellow cards. VAR overturns. Attendance. Pick any World Cup market that pulls you in.",
-    badge: { bg: '#FEF3C7', fg: '#D97706', emoji: '⚽' },
+    badge: { bg: '#FEF3C7', fg: '#D97706', glyph: glyphPick },
   },
   {
     overline: 'Step 2',
     title: 'Aim, time, kick',
     body:
-      "Lock the aim where you want to score. Time the kick inside the sweet spot for conviction. Wind adds character — the worse your timing, the more it nudges you.",
-    badge: { bg: '#FFEDD5', fg: '#EA580C', emoji: '🎯' },
+      "Lock the aim where you want to score. Time the kick inside the sweet spot for conviction. Wind adds character; the worse your timing, the more it nudges you.",
+    badge: { bg: '#FFEDD5', fg: '#EA580C', glyph: glyphAim },
   },
   {
     overline: 'Step 3',
     title: 'Stack kicks for a richer call',
     body:
       "Take up to 5 kicks. Each one adds a region to your belief. Aim where the goalkeeper (the crowd) is faded for a bigger potential payout.",
-    badge: { bg: '#FCE7F3', fg: '#DB2777', emoji: '🔥' },
+    badge: { bg: '#FCE7F3', fg: '#DB2777', glyph: glyphStack },
   },
 ];
 
@@ -46,10 +73,20 @@ export function IntroSheet({ forceShow = false }: IntroSheetProps) {
       const seen = localStorage.getItem(STORAGE_KEY);
       if (!seen || forceShow) setOpen(true);
     } catch {
-      // localStorage may be disabled — show by default
+      // localStorage may be disabled, default to showing the sheet
       setOpen(true);
     }
   }, [forceShow]);
+
+  // Freeze background scroll while the sheet is open.
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
 
   const close = () => {
     try {
@@ -79,7 +116,7 @@ export function IntroSheet({ forceShow = false }: IntroSheetProps) {
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(15, 15, 16, 0.45)',
+            background: 'var(--sp-modal-scrim)',
             backdropFilter: 'blur(4px)',
             WebkitBackdropFilter: 'blur(4px)',
             display: 'flex',
@@ -162,11 +199,13 @@ export function IntroSheet({ forceShow = false }: IntroSheetProps) {
                     display: 'inline-flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: '32px',
                     marginBottom: '16px',
                   }}
+                  aria-hidden
                 >
-                  {current.badge.emoji}
+                  <svg width="36" height="36" viewBox="0 0 24 24">
+                    {current.badge.glyph}
+                  </svg>
                 </div>
                 <div className="sp-uppercase sp-secondary" style={{ marginBottom: '6px' }}>
                   {current.overline}

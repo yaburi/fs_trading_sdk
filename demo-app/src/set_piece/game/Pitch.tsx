@@ -1,3 +1,4 @@
+import { useEffect, useRef, type MutableRefObject } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { MarketState, ConsensusCurve, PointRegion } from '@functionspace/core';
 
@@ -49,11 +50,16 @@ export interface BeliefCurve {
   points: { x: number; y: number }[];
 }
 
+/** Coral aim dot variants. `live` reads a ref each animation frame and mutates
+ *  its own DOM without re-rendering the Pitch. `locked` is a static position. */
+export type AimDescriptor =
+  | { kind: 'live'; phaseRef: MutableRefObject<number> }
+  | { kind: 'locked'; x: number };
+
 interface PitchProps {
   market: MarketState;
   consensus: ConsensusCurve | null;
-  /** Coral aim dot rendered on the goal-line. 0..1 normalized. */
-  aimDot?: { x: number; locked: boolean } | null;
+  aim?: AimDescriptor | null;
   /** Previously-landed kicks rendered as small coral markers on the goal-line. */
   kicks?: PointRegion[];
   /** Composed-belief density curve, drawn as a coral line over the goal mouth. */
@@ -67,7 +73,7 @@ interface PitchProps {
 export function Pitch({
   market,
   consensus,
-  aimDot,
+  aim,
   kicks = [],
   belief,
   ballTarget,
@@ -98,7 +104,7 @@ export function Pitch({
         borderRadius: 'var(--sp-radius-md)',
         overflow: 'hidden',
         background:
-          'radial-gradient(ellipse 80% 60% at 50% 20%, rgba(22, 163, 74, 0.14), rgba(22, 163, 74, 0.02) 70%), linear-gradient(180deg, #FAFBFA 0%, #EEF2EE 100%)',
+          'radial-gradient(ellipse 80% 60% at 50% 20%, var(--sp-pitch-grass-glow), var(--sp-pitch-grass-fade) 70%), linear-gradient(180deg, var(--sp-pitch-top) 0%, var(--sp-pitch-bot) 100%)',
       }}
     >
       <svg
@@ -110,11 +116,11 @@ export function Pitch({
       >
         <defs>
           <linearGradient id="keeperGradient" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="rgba(15, 15, 16, 0.10)" />
-            <stop offset="100%" stopColor="rgba(15, 15, 16, 0.30)" />
+            <stop offset="0%" stopColor="var(--sp-keeper-light)" />
+            <stop offset="100%" stopColor="var(--sp-keeper-dark)" />
           </linearGradient>
           <radialGradient id="ballGloss" cx="35%" cy="30%" r="50%">
-            <stop offset="0%" stopColor="rgba(255, 255, 255, 0.9)" />
+            <stop offset="0%" stopColor="var(--sp-ball-gloss)" />
             <stop offset="60%" stopColor="rgba(255, 255, 255, 0)" />
           </radialGradient>
         </defs>
@@ -125,7 +131,7 @@ export function Pitch({
             PITCH.ballY - 28
           } ${PITCH.ballX + 60} ${PITCH.ballY - 12}`}
           fill="none"
-          stroke="#FFFFFF"
+          stroke="var(--sp-surface)"
           strokeWidth="1"
           opacity="0.5"
         />
@@ -141,7 +147,7 @@ export function Pitch({
         ) : null}
 
         {/* Net hint */}
-        <g stroke="#FFFFFF" strokeWidth="0.6" opacity="0.55">
+        <g stroke="var(--sp-surface)" strokeWidth="0.6" opacity="0.55">
           {Array.from({ length: 10 }, (_, i) => {
             const x = PITCH.goalLeft + (GOAL_WIDTH / 10) * (i + 1);
             return (
@@ -171,7 +177,7 @@ export function Pitch({
 
         {/* Goal frame */}
         <g
-          stroke="#FFFFFF"
+          stroke="var(--sp-surface)"
           strokeWidth="3.5"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -203,7 +209,7 @@ export function Pitch({
           y1={PITCH.goalBottom}
           x2={PITCH.goalRight + 8}
           y2={PITCH.goalBottom}
-          stroke="#FFFFFF"
+          stroke="var(--sp-surface)"
           strokeWidth="2.5"
           strokeLinecap="round"
         />
@@ -216,7 +222,7 @@ export function Pitch({
           fontFamily="var(--sp-font-mono)"
           fontSize="11"
           fontWeight="600"
-          fill="#0F0F10"
+          fill="var(--sp-text)"
           opacity="0.55"
         >
           {fmt(lowerBound)}
@@ -228,7 +234,7 @@ export function Pitch({
           fontFamily="var(--sp-font-mono)"
           fontSize="11"
           fontWeight="600"
-          fill="#0F0F10"
+          fill="var(--sp-text)"
           opacity="0.55"
         >
           {fmt(upperBound)}
@@ -275,29 +281,16 @@ export function Pitch({
           );
         })}
 
-        {/* Live aim dot (oscillating or locked) */}
-        {aimDot != null && (
-          <g transform={`translate(${aimToPixelX(aimDot.x)}, ${PITCH.goalBottom})`}>
-            {!aimDot.locked && (
-              <circle
-                cx="0"
-                cy="0"
-                r="9"
-                fill="var(--sp-accent)"
-                opacity="0.18"
-              />
-            )}
+        {/* Aim dot: live oscillator OR static locked position. */}
+        {aim?.kind === 'live' && <AimDotLive phaseRef={aim.phaseRef} />}
+        {aim?.kind === 'locked' && (
+          <g transform={`translate(${aimToPixelX(aim.x)}, ${PITCH.goalBottom})`}>
             <circle cx="0" cy="0" r="5" fill="var(--sp-accent)" />
-            <circle
-              cx="0"
-              cy="0"
-              r="2"
-              fill="#FFFFFF"
-            />
+            <circle cx="0" cy="0" r="2" fill="var(--sp-surface)" />
           </g>
         )}
 
-        {/* Ball — animated by framer-motion */}
+        {/* Ball; animated by framer-motion */}
         <motion.g
           animate={ballTargetPixel}
           initial={false}
@@ -311,14 +304,40 @@ export function Pitch({
           }}
         >
           <g transform={`translate(${PITCH.ballX}, ${PITCH.ballY})`}>
-            <ellipse cx="0" cy="12" rx="11" ry="2.8" fill="rgba(0, 0, 0, 0.18)" />
-            <circle cx="0" cy="0" r="11" fill="#FFFFFF" stroke="#0F0F10" strokeWidth="1.4" />
-            <polygon points="0,-5 4.8,-1.5 3,4 -3,4 -4.8,-1.5" fill="#0F0F10" />
+            <ellipse cx="0" cy="12" rx="11" ry="2.8" fill="var(--sp-ball-shadow)" />
+            <circle cx="0" cy="0" r="11" fill="var(--sp-surface)" stroke="var(--sp-text)" strokeWidth="1.4" />
+            <polygon points="0,-5 4.8,-1.5 3,4 -3,4 -4.8,-1.5" fill="var(--sp-text)" />
             <circle cx="0" cy="0" r="11" fill="url(#ballGloss)" />
           </g>
         </motion.g>
       </svg>
     </div>
+  );
+}
+
+/** Self-animating aim dot. Reads phaseRef on every frame and mutates its own
+ *  group's transform. Parent never re-renders during oscillation. */
+function AimDotLive({ phaseRef }: { phaseRef: MutableRefObject<number> }) {
+  const groupRef = useRef<SVGGElement>(null);
+  useEffect(() => {
+    let raf = 0;
+    const tick = () => {
+      const g = groupRef.current;
+      if (g) {
+        const x = aimToPixelX(phaseRef.current);
+        g.setAttribute('transform', `translate(${x}, ${PITCH.goalBottom})`);
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [phaseRef]);
+  return (
+    <g ref={groupRef} transform={`translate(${aimToPixelX(phaseRef.current)}, ${PITCH.goalBottom})`}>
+      <circle cx="0" cy="0" r="9" fill="var(--sp-accent)" opacity="0.18" />
+      <circle cx="0" cy="0" r="5" fill="var(--sp-accent)" />
+      <circle cx="0" cy="0" r="2" fill="var(--sp-surface)" />
+    </g>
   );
 }
 

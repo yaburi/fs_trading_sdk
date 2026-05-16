@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   useAuth,
@@ -118,6 +118,24 @@ function PositionsList({
   tab: TabKey;
   onPickMarket: (id: string | number) => void;
 }) {
+  // Per-market filtered position counts, populated as each block loads.
+  // Resets when the tab switches so we recompute "all empty" against the new filter.
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  useEffect(() => {
+    setCounts({});
+  }, [tab]);
+  const handleCount = useCallback((marketId: string | number, count: number) => {
+    setCounts((prev) => {
+      const key = String(marketId);
+      if (prev[key] === count) return prev;
+      return { ...prev, [key]: count };
+    });
+  }, []);
+
+  const allLoaded = Object.keys(counts).length >= markets.length && markets.length > 0;
+  const hasAny = Object.values(counts).some((c) => c > 0);
+  const showEmpty = allLoaded && !hasAny;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
       {markets.length === 0 ? (
@@ -134,11 +152,12 @@ function PositionsList({
             username={username}
             tab={tab}
             onPickMarket={onPickMarket}
+            onCount={handleCount}
           />
         ))
       )}
-      {markets.length > 0 && (
-        <EmptyAcrossAllHint markets={markets} username={username} tab={tab} onPickMarket={onPickMarket} />
+      {showEmpty && (
+        <EmptyAcrossAllHint markets={markets} tab={tab} onPickMarket={onPickMarket} />
       )}
     </div>
   );
@@ -153,14 +172,16 @@ function MarketPositionsBlock({
   username,
   tab,
   onPickMarket,
+  onCount,
 }: {
   market: MarketState;
   username: string;
   tab: TabKey;
   onPickMarket: (id: string | number) => void;
+  onCount: (marketId: string | number, count: number) => void;
 }) {
   const { positions, loading } = usePositions(market.marketId, username, {
-    pollInterval: 8000,
+    pollInterval: 20000,
   });
 
   const filtered = useMemo(() => {
@@ -169,6 +190,13 @@ function MarketPositionsBlock({
       ? positions.filter((p) => p.status === 'open')
       : positions.filter((p) => p.status !== 'open');
   }, [positions, tab]);
+
+  // Report count to parent once positions resolve so it knows when to show
+  // the "no positions anywhere" empty state.
+  useEffect(() => {
+    if (loading || !positions) return;
+    onCount(market.marketId, filtered.length);
+  }, [loading, positions, filtered.length, market.marketId, onCount]);
 
   if (loading || filtered.length === 0) return null;
 
@@ -248,7 +276,9 @@ function PositionRow({
 
   const handleSell = async () => {
     try {
-      await sell.execute(position.positionId);
+      // SDK type quirk: Position.positionId is string|number but
+      // useSell.execute wants number. API always returns numerics in practice.
+      await sell.execute(Number(position.positionId));
     } catch {
       /* error rendered below */
     }
@@ -307,7 +337,7 @@ function PositionRow({
           <div style={{ textAlign: 'right' }}>
             <div className="sp-uppercase sp-secondary">Returned</div>
             <div className="sp-mono" style={{ fontSize: '13px' }}>
-              {position.soldPrice != null ? `$${position.soldPrice.toFixed(2)}` : '—'}
+              {position.soldPrice != null ? `$${position.soldPrice.toFixed(2)}` : '–'}
             </div>
           </div>
         )}
@@ -327,24 +357,17 @@ function PositionRow({
   );
 }
 
-/**
- * Shows an empty-state card only if EVERY market reports zero matching
- * positions. Uses the same per-market hook chain so the cache key matches.
- */
+/** Empty-state card, only rendered when every market has reported zero
+ * matching positions for the active tab. */
 function EmptyAcrossAllHint({
   markets,
   tab,
   onPickMarket,
 }: {
   markets: MarketState[];
-  username: string;
   tab: TabKey;
   onPickMarket: (id: string | number) => void;
 }) {
-  // We can't know "all empty" without hook calls; render an unobtrusive footer hint
-  // that appears below the per-market blocks. When at least one block renders, this
-  // hint feels redundant but stays harmless. When no blocks render, it acts as the
-  // empty state.
   return (
     <Card tone="inset" padding="md">
       <div className="sp-secondary" style={{ fontSize: '13px', lineHeight: 1.5 }}>

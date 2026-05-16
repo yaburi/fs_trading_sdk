@@ -25,8 +25,8 @@ export function Header({ onBack, centerLabel, showWallet = true }: HeaderProps) 
         minHeight: '36px',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '64px' }}>
-        {onBack ? (
+      {onBack && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '64px' }}>
           <button
             aria-label="Back"
             onClick={onBack}
@@ -45,8 +45,8 @@ export function Header({ onBack, centerLabel, showWallet = true }: HeaderProps) 
           >
             ←
           </button>
-        ) : null}
-      </div>
+        </div>
+      )}
 
       <div
         style={{

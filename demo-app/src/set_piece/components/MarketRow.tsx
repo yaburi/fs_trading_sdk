@@ -54,11 +54,24 @@ export function MarketRow({ market, onClick }: MarketRowProps) {
             style={{
               fontSize: '17px',
               lineHeight: 1.25,
-              marginBottom: '10px',
+              marginBottom: '8px',
               wordBreak: 'break-word',
             }}
           >
             {market.title}
+          </div>
+
+          <div
+            className="sp-secondary"
+            style={{ fontSize: '12px', marginBottom: '10px' }}
+          >
+            <span className="sp-uppercase" style={{ marginRight: '6px' }}>
+              Range
+            </span>
+            <span className="sp-mono" style={{ color: 'var(--sp-text)' }}>
+              {formatRange(market)}
+            </span>
+            {units && <span style={{ marginLeft: '4px' }}>{units}</span>}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
@@ -70,7 +83,7 @@ export function MarketRow({ market, onClick }: MarketRowProps) {
                   padding: '3px 8px',
                   borderRadius: '999px',
                   background: tag === 'World Cup' ? 'var(--sp-accent)' : 'var(--sp-surface-2)',
-                  color: tag === 'World Cup' ? '#FFFFFF' : 'var(--sp-text-secondary)',
+                  color: tag === 'World Cup' ? 'var(--sp-on-accent)' : 'var(--sp-text-secondary)',
                   border: tag === 'World Cup' ? 'none' : '1px solid var(--sp-border)',
                   fontSize: '10px',
                 }}
@@ -94,27 +107,6 @@ export function MarketRow({ market, onClick }: MarketRowProps) {
               </span>
             )}
           </div>
-        </div>
-
-        <div
-          style={{
-            flexShrink: 0,
-            textAlign: 'right',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'flex-end',
-            gap: '4px',
-          }}
-        >
-          <div className="sp-uppercase sp-secondary">Range</div>
-          <div className="sp-mono" style={{ fontSize: '14px', color: 'var(--sp-text)' }}>
-            {formatRange(market)}
-          </div>
-          {units && (
-            <div className="sp-secondary" style={{ fontSize: '11px' }}>
-              {units}
-            </div>
-          )}
         </div>
       </div>
     </Card>

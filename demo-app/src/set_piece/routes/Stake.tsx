@@ -220,7 +220,7 @@ export default function Stake() {
                   borderRadius: 'var(--sp-radius-pill)',
                   border: '1px solid var(--sp-border)',
                   background: active ? 'var(--sp-primary)' : 'var(--sp-surface)',
-                  color: active ? '#FFFFFF' : 'var(--sp-text)',
+                  color: active ? 'var(--sp-on-primary)' : 'var(--sp-text)',
                   fontSize: '13px',
                   fontWeight: 600,
                   fontFamily: 'var(--sp-font-mono)',
@@ -241,7 +241,7 @@ export default function Stake() {
               border: '1px solid var(--sp-border)',
               background:
                 Math.round(stake) === walletMax ? 'var(--sp-primary)' : 'var(--sp-surface)',
-              color: Math.round(stake) === walletMax ? '#FFFFFF' : 'var(--sp-text)',
+              color: Math.round(stake) === walletMax ? 'var(--sp-on-primary)' : 'var(--sp-text)',
               fontSize: '12px',
               fontWeight: 700,
               letterSpacing: '0.04em',

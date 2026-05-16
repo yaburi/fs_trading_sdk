@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { PasswordlessAuthWidget } from '@functionspace/ui';
 import type { UserProfile } from '@functionspace/core';
@@ -14,6 +15,7 @@ interface AuthSheetProps {
  * "Sign in to kick" CTA when the user is in guest mode.
  */
 export function AuthSheet({ open, onClose, onLogin }: AuthSheetProps) {
+  useBodyScrollLock(open);
   return (
     <AnimatePresence>
       {open && (
@@ -27,7 +29,7 @@ export function AuthSheet({ open, onClose, onLogin }: AuthSheetProps) {
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(15, 15, 16, 0.45)',
+            background: 'var(--sp-modal-scrim)',
             backdropFilter: 'blur(4px)',
             WebkitBackdropFilter: 'blur(4px)',
             display: 'flex',
@@ -75,7 +77,7 @@ export function AuthSheet({ open, onClose, onLogin }: AuthSheetProps) {
                   className="sp-secondary"
                   style={{ fontSize: '12px', marginTop: '2px' }}
                 >
-                  Just a username — no password, no email.
+                  Just a username. No password, no email.
                 </div>
               </div>
               <button
@@ -100,4 +102,17 @@ export function AuthSheet({ open, onClose, onLogin }: AuthSheetProps) {
       )}
     </AnimatePresence>
   );
+}
+
+/** Freeze background scroll while a sheet is open. iOS would otherwise let
+ * the page rubber-band underneath the sheet. */
+function useBodyScrollLock(locked: boolean) {
+  useEffect(() => {
+    if (!locked) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [locked]);
 }

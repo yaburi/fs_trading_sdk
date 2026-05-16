@@ -1,11 +1,13 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useConsensus, useMarket } from '@functionspace/react';
+import { useAuth, useConsensus, useMarket, usePreviewPayout } from '@functionspace/react';
+import type { PayoutCurve } from '@functionspace/core';
 import { PageShell } from '../components/PageShell';
 import { Header } from '../components/Header';
 import { Card } from '../components/Card';
 import { Pill } from '../components/Pill';
 import { MarketIcon } from '../components/MarketIcon';
+import { AuthSheet } from '../components/AuthSheet';
 import { Pitch } from '../game/Pitch';
 import { useKickEngine } from '../game/useKickEngine';
 import { TimingMeter } from '../game/TimingMeter';
@@ -22,6 +24,34 @@ export default function Game() {
   const engine = useKickEngine(market);
   const composed = useComposedBelief(market, round.kicks, 80);
   const kicksRemaining = ROUND_CONSTANTS.MAX_KICKS - round.kicks.length;
+  const { isAuthenticated } = useAuth();
+  const [authOpen, setAuthOpen] = useState(false);
+
+  // Live payout preview, debounced. Skipped for guests because the SDK client
+  // rejects all POSTs without a token; sign-in is offered inline instead.
+  const preview = usePreviewPayout(marketId ?? '');
+  const [payout, setPayout] = useState<PayoutCurve | null>(null);
+  const [payoutLoading, setPayoutLoading] = useState(false);
+  useEffect(() => {
+    if (!composed || !isAuthenticated) {
+      setPayout(null);
+      setPayoutLoading(false);
+      return;
+    }
+    setPayoutLoading(true);
+    const id = setTimeout(async () => {
+      try {
+        const curve = await preview.execute(composed.vector, round.stake);
+        setPayout(curve);
+      } catch {
+        setPayout(null);
+      } finally {
+        setPayoutLoading(false);
+      }
+    }, 250);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [composed, round.stake, isAuthenticated]);
 
   // After ball lands, hold briefly so the user sees the kick on the goal-line,
   // then commit the region to round state and reset the engine to 'ready'.
@@ -35,16 +65,19 @@ export default function Game() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engine.state]);
 
-  // The aim dot shown on the goal-line:
-  //   - oscillating during 'aiming'
-  //   - locked at the captured aimX during 'timing'
-  const aimDot = useMemo(() => {
-    if (engine.state === 'aiming') return { x: engine.aimPhase, locked: false };
+  // Aim dot: live during 'aiming' (driven by ref, no re-render),
+  // locked during 'timing'/'flying', absent otherwise.
+  const aim = useMemo<
+    | { kind: 'live'; phaseRef: typeof engine.aimPhaseRef }
+    | { kind: 'locked'; x: number }
+    | null
+  >(() => {
+    if (engine.state === 'aiming') return { kind: 'live', phaseRef: engine.aimPhaseRef };
     if (engine.aimX != null && (engine.state === 'timing' || engine.state === 'flying')) {
-      return { x: engine.aimX, locked: true };
+      return { kind: 'locked', x: engine.aimX };
     }
     return null;
-  }, [engine.state, engine.aimPhase, engine.aimX]);
+  }, [engine.state, engine.aimPhaseRef, engine.aimX]);
 
   // The ball target. When flying or just landed, place at landingX.
   const ballTarget = useMemo(() => {
@@ -135,7 +168,7 @@ export default function Game() {
           <Pitch
             market={market}
             consensus={consensus}
-            aimDot={aimDot}
+            aim={aim}
             kicks={round.kicks}
             belief={composed?.curve ?? null}
             ballTarget={ballTarget}
@@ -166,22 +199,33 @@ export default function Game() {
         <PhaseHint
           state={engine.state}
           kicksTaken={round.kicks.length}
-          aimX={engine.aimX}
+          aimOutcome={
+            engine.aimX != null && market
+              ? formatOutcome(
+                  market.config.lowerBound +
+                    engine.aimX * (market.config.upperBound - market.config.lowerBound),
+                  market.decimals ?? 0,
+                  market.xAxisUnits || '',
+                )
+              : null
+          }
         />
       </div>
 
-      {/* Composed belief summary — appears after first kick */}
+      {/* Composed belief summary, appears after first kick.
+       * Two columns: your call (mean + spread) on the left, best payout
+       * (the headline figure) on the right. */}
       {composed && market && (
         <Card padding="md" tone="inset">
           <div
             style={{
               display: 'flex',
-              alignItems: 'center',
+              alignItems: 'flex-start',
               justifyContent: 'space-between',
               gap: '12px',
             }}
           >
-            <div>
+            <div style={{ minWidth: 0 }}>
               <div className="sp-uppercase sp-secondary" style={{ marginBottom: '2px' }}>
                 Your call
               </div>
@@ -202,17 +246,70 @@ export default function Game() {
                   </span>
                 )}
               </div>
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <div className="sp-uppercase sp-secondary" style={{ marginBottom: '2px' }}>
-                Confidence
-              </div>
-              <div className="sp-mono" style={{ fontSize: '13px' }}>
-                ±{composed.stats.stdDev.toLocaleString(undefined, {
+              <div
+                className="sp-secondary"
+                style={{ fontSize: '11px', marginTop: '4px' }}
+              >
+                ±
+                {composed.stats.stdDev.toLocaleString(undefined, {
                   minimumFractionDigits: market.decimals ?? 0,
                   maximumFractionDigits: (market.decimals ?? 0) + 1,
                 })}
+                {market.xAxisUnits ? ` ${market.xAxisUnits}` : ''} confidence
               </div>
+            </div>
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+              <div className="sp-uppercase sp-secondary" style={{ marginBottom: '2px' }}>
+                Best payout
+              </div>
+              {isAuthenticated ? (
+                <>
+                  <div className="sp-display-md" style={{ fontSize: '20px' }}>
+                    {payout ? (
+                      <span className="sp-mono" style={{ color: 'var(--sp-positive)' }}>
+                        ${payout.maxPayout.toFixed(2)}
+                      </span>
+                    ) : (
+                      <span className="sp-secondary" style={{ fontSize: '14px' }}>
+                        {payoutLoading ? 'previewing…' : '–'}
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    className="sp-secondary"
+                    style={{ fontSize: '11px', marginTop: '4px' }}
+                  >
+                    {payout
+                      ? `if outcome ≈ ${payout.maxPayoutOutcome.toLocaleString(undefined, {
+                          minimumFractionDigits: market.decimals ?? 0,
+                          maximumFractionDigits: market.decimals ?? 0,
+                        })}`
+                      : `staking $${round.stake.toFixed(round.stake % 1 === 0 ? 0 : 2)}`}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => setAuthOpen(true)}
+                    style={{
+                      color: 'var(--sp-accent)',
+                      fontFamily: 'var(--sp-font-body)',
+                      fontSize: '15px',
+                      fontWeight: 600,
+                      padding: 0,
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    Sign in to see →
+                  </button>
+                  <div
+                    className="sp-secondary"
+                    style={{ fontSize: '11px', marginTop: '4px' }}
+                  >
+                    staking ${round.stake.toFixed(round.stake % 1 === 0 ? 0 : 2)}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </Card>
@@ -222,13 +319,19 @@ export default function Game() {
       {showTiming && (
         <Card padding="md" tone="inset">
           <TimingMeter
-            phase={engine.timingPhase}
+            phaseRef={engine.timingPhaseRef}
             sweetSpotCenter={engine.sweetSpot.center}
             sweetSpotHalfWidth={engine.sweetSpot.halfWidth}
             locked={engine.state === 'flying'}
           />
         </Card>
       )}
+
+      <AuthSheet
+        open={authOpen}
+        onClose={() => setAuthOpen(false)}
+        onLogin={() => setAuthOpen(false)}
+      />
     </PageShell>
   );
 }
@@ -252,21 +355,29 @@ function KickDots({ taken, total }: { taken: number; total: number }) {
   );
 }
 
+function formatOutcome(value: number, decimals: number, units: string): string {
+  const formatted = value.toLocaleString(undefined, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+  return units ? `${formatted} ${units}` : formatted;
+}
+
 function PhaseHint({
   state,
   kicksTaken,
-  aimX,
+  aimOutcome,
 }: {
   state: ReturnType<typeof useKickEngine>['state'];
   kicksTaken: number;
-  aimX: number | null;
+  aimOutcome: string | null;
 }) {
   const baseStyle = { fontSize: '13px', color: 'var(--sp-text-secondary)' };
   if (state === 'ready') {
     return (
       <span style={baseStyle}>
         {kicksTaken === 0
-          ? 'Step up — tap Start kick when you\'re ready.'
+          ? 'Step up. Tap Start kick when you\'re ready.'
           : kicksTaken < ROUND_CONSTANTS.MAX_KICKS
           ? 'Take another kick or finalize your belief.'
           : 'Max kicks taken. Finalize when ready.'}
@@ -274,12 +385,13 @@ function PhaseHint({
     );
   }
   if (state === 'aiming') {
-    return <span style={baseStyle}>Watch the dot — tap Lock aim where you want to score.</span>;
+    return <span style={baseStyle}>Watch the dot. Tap Lock aim where you want to score.</span>;
   }
   if (state === 'timing') {
     return (
       <span style={baseStyle}>
-        Tap Lock timing inside the coral band for a tight kick. Aim was {Math.round((aimX ?? 0) * 100)}%.
+        Tap Lock timing inside the coral band for a tight kick.
+        {aimOutcome ? ` Aim was ${aimOutcome}.` : ''}
       </span>
     );
   }

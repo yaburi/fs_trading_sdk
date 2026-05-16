@@ -48,7 +48,7 @@ export function PageShell({ children, header, footer }: PageShellProps) {
               bottom: '-12px',
               pointerEvents: 'none',
               background:
-                'linear-gradient(to bottom, rgba(244, 244, 245, 0.88) 0%, rgba(244, 244, 245, 0.55) 60%, rgba(244, 244, 245, 0) 100%)',
+                'linear-gradient(to bottom, var(--sp-glass-top) 0%, var(--sp-glass-mid) 60%, rgba(244, 244, 245, 0) 100%)',
               backdropFilter: 'blur(12px)',
               WebkitBackdropFilter: 'blur(12px)',
               maskImage:
@@ -74,7 +74,9 @@ export function PageShell({ children, header, footer }: PageShellProps) {
         style={{
           width: '100%',
           maxWidth: 'var(--sp-max-width)',
-          padding: '20px 16px 32px',
+          padding: footer
+            ? '20px 16px calc(96px + env(safe-area-inset-bottom))'
+            : '20px 16px 32px',
           flex: 1,
           display: 'flex',
           flexDirection: 'column',
@@ -90,7 +92,7 @@ export function PageShell({ children, header, footer }: PageShellProps) {
             position: 'sticky',
             bottom: 0,
             width: '100%',
-            background: 'rgba(244, 244, 245, 0.92)',
+            background: 'var(--sp-glass-footer)',
             backdropFilter: 'blur(12px)',
             WebkitBackdropFilter: 'blur(12px)',
             borderTop: '1px solid var(--sp-border-subtle)',

@@ -1,7 +1,7 @@
 /* Set Piece — global styles */
 
 :root {
-  /* Mirrored from theme.ts for direct CSS use */
+  /* Core palette. Mirrored from theme.ts; future dark mode swaps these. */
   --sp-primary: #0F0F10;
   --sp-accent: #FF6B3D;
   --sp-positive: #16A34A;
@@ -14,6 +14,36 @@
   --sp-text-muted: #A1A1AA;
   --sp-border: #E4E4E7;
   --sp-border-subtle: #F4F4F5;
+
+  /* On-primary / on-accent ink. Lets pills theme cleanly. */
+  --sp-on-primary: #FFFFFF;
+  --sp-on-accent: #FFFFFF;
+
+  /* Accent alphas for SVG strokes/fills that can't reference --sp-accent
+   * with opacity baked in. Tweaking accent OR these stays one file. */
+  --sp-accent-soft: rgba(255, 107, 61, 0.18);
+  --sp-accent-edge: rgba(255, 107, 61, 0.55);
+  --sp-accent-strong: rgba(255, 107, 61, 0.65);
+
+  /* Modal + celebration veils */
+  --sp-modal-scrim: rgba(15, 15, 16, 0.45);
+  --sp-celebration-veil: rgba(244, 244, 245, 0.85);
+  --sp-positive-shadow: rgba(22, 163, 74, 0.18);
+
+  /* Pitch surface gradients + keeper / ball alpha layers */
+  --sp-pitch-top: #FAFBFA;
+  --sp-pitch-bot: #EEF2EE;
+  --sp-pitch-grass-glow: rgba(22, 163, 74, 0.14);
+  --sp-pitch-grass-fade: rgba(22, 163, 74, 0.02);
+  --sp-keeper-light: rgba(15, 15, 16, 0.10);
+  --sp-keeper-dark: rgba(15, 15, 16, 0.30);
+  --sp-ball-shadow: rgba(0, 0, 0, 0.18);
+  --sp-ball-gloss: rgba(255, 255, 255, 0.9);
+
+  /* Glass header / footer fills */
+  --sp-glass-top: rgba(244, 244, 245, 0.88);
+  --sp-glass-mid: rgba(244, 244, 245, 0.55);
+  --sp-glass-footer: rgba(244, 244, 245, 0.92);
 
   --sp-font-display: "Bricolage Grotesque", system-ui, sans-serif;
   --sp-font-body: "Inter", system-ui, sans-serif;
@@ -128,7 +158,7 @@ select {
   color: inherit;
 }
 
-/* Stake slider — themed native range input */
+/* Stake slider, themed native range input */
 .sp-stake-slider {
   -webkit-appearance: none;
   appearance: none;

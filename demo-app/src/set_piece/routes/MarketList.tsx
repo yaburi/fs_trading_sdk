@@ -63,7 +63,7 @@ export default function MarketList() {
                 padding: '8px 16px',
                 borderRadius: '999px',
                 background: 'var(--sp-primary)',
-                color: '#FFFFFF',
+                color: 'var(--sp-on-primary)',
                 fontSize: '13px',
                 fontWeight: 600,
               }}

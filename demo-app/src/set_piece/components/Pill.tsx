@@ -30,7 +30,7 @@ export function Pill({
   const variantStyles: Record<Variant, React.CSSProperties> = {
     primary: {
       background: 'var(--sp-primary)',
-      color: '#FFFFFF',
+      color: 'var(--sp-on-primary)',
     },
     secondary: {
       background: 'var(--sp-surface)',
@@ -43,7 +43,7 @@ export function Pill({
     },
     accent: {
       background: 'var(--sp-accent)',
-      color: '#FFFFFF',
+      color: 'var(--sp-on-accent)',
     },
   };
 

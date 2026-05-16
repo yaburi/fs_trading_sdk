@@ -43,10 +43,12 @@ export default function Confirm() {
     }
   }, [round.kicks.length, market, marketId, navigate]);
 
-  // Debounced payout preview as the belief/stake settles
+  // Debounced payout preview. Skipped for guests since the SDK rejects all
+  // POSTs without a token; after sign-in the effect refires automatically.
   useEffect(() => {
-    if (!composed) {
+    if (!composed || !isAuthenticated) {
       setPayout(null);
+      setPayoutLoading(false);
       return;
     }
     setPayoutLoading(true);
@@ -62,7 +64,7 @@ export default function Confirm() {
     }, 250);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [composed, round.stake]);
+  }, [composed, round.stake, isAuthenticated]);
 
   const submitBuy = useCallback(async () => {
     if (!composed) return;
@@ -214,25 +216,49 @@ export default function Confirm() {
             <div className="sp-uppercase sp-secondary" style={{ marginBottom: '4px' }}>
               Best payout
             </div>
-            <div className="sp-display-md" style={{ fontSize: '22px' }}>
-              {payout ? (
-                <span className="sp-mono" style={{ color: 'var(--sp-positive)' }}>
-                  ${payout.maxPayout.toFixed(2)}
-                </span>
-              ) : (
-                <span className="sp-secondary" style={{ fontSize: '14px' }}>
-                  {payoutLoading ? 'previewing…' : '—'}
-                </span>
-              )}
-            </div>
-            <div className="sp-secondary" style={{ fontSize: '11px', marginTop: '4px' }}>
-              {payout
-                ? `if outcome ≈ ${payout.maxPayoutOutcome.toLocaleString(undefined, {
-                    minimumFractionDigits: market.decimals ?? 0,
-                    maximumFractionDigits: market.decimals ?? 0,
-                  })}`
-                : `staking $${round.stake.toFixed(round.stake % 1 === 0 ? 0 : 2)}`}
-            </div>
+            {isAuthenticated ? (
+              <>
+                <div className="sp-display-md" style={{ fontSize: '22px' }}>
+                  {payout ? (
+                    <span className="sp-mono" style={{ color: 'var(--sp-positive)' }}>
+                      ${payout.maxPayout.toFixed(2)}
+                    </span>
+                  ) : (
+                    <span className="sp-secondary" style={{ fontSize: '14px' }}>
+                      {payoutLoading ? 'previewing…' : '–'}
+                    </span>
+                  )}
+                </div>
+                <div className="sp-secondary" style={{ fontSize: '11px', marginTop: '4px' }}>
+                  {payout
+                    ? `if outcome ≈ ${payout.maxPayoutOutcome.toLocaleString(undefined, {
+                        minimumFractionDigits: market.decimals ?? 0,
+                        maximumFractionDigits: market.decimals ?? 0,
+                      })}`
+                    : `staking $${round.stake.toFixed(round.stake % 1 === 0 ? 0 : 2)}`}
+                </div>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => setAuthOpen(true)}
+                  style={{
+                    color: 'var(--sp-accent)',
+                    fontFamily: 'var(--sp-font-body)',
+                    fontSize: '17px',
+                    fontWeight: 600,
+                    padding: 0,
+                    lineHeight: 1.2,
+                    textAlign: 'left',
+                  }}
+                >
+                  Sign in to see →
+                </button>
+                <div className="sp-secondary" style={{ fontSize: '11px', marginTop: '4px' }}>
+                  staking ${round.stake.toFixed(round.stake % 1 === 0 ? 0 : 2)}
+                </div>
+              </>
+            )}
           </Card>
         </div>
       )}
@@ -288,7 +314,7 @@ export default function Confirm() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              background: 'rgba(244, 244, 245, 0.85)',
+              background: 'var(--sp-celebration-veil)',
               backdropFilter: 'blur(10px)',
               WebkitBackdropFilter: 'blur(10px)',
               zIndex: 200,
@@ -297,12 +323,12 @@ export default function Confirm() {
             <motion.div
               initial={{ scale: 0.6, rotate: -8, opacity: 0 }}
               animate={{ scale: 1, rotate: -4, opacity: 1 }}
-              transition={{ type: 'spring', stiffness: 220, damping: 14 }}
+              transition={{ type: 'spring', stiffness: 220, damping: 28 }}
               className="sp-script"
               style={{
                 fontSize: 'clamp(64px, 18vw, 120px)',
                 color: 'var(--sp-positive)',
-                textShadow: '0 4px 0 rgba(22, 163, 74, 0.18)',
+                textShadow: '0 4px 0 var(--sp-positive-shadow)',
                 letterSpacing: '-0.02em',
               }}
             >

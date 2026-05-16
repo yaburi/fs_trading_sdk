@@ -1,9 +1,6 @@
-/* Demo app page background -- not part of the SDK theme system */
-/* Switch to match your active theme preset in App.tsx */
+/* Demo app page background. Set Piece is paper-light; match it here so the
+ * initial paint and iOS overscroll bands don't flash a different theme. */
 body {
-  /* background: #0a0a0f; fs-dark / fs-midnight */
-  /* background: #f8fafc; */ /* fs-light */
-  /* background: #ffffff; native-light */
-  background: #111111; /* native-dark */
+  background: #F4F4F5;
   margin: 0;
 }
