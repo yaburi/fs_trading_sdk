@@ -30,8 +30,10 @@ export interface Wind {
 
 const AIM_PERIOD_MS = 1400;
 const TIMING_PERIOD_MS = 1100;
-const SWEET_SPOT_CENTER = 0.5;
-const SWEET_SPOT_HALF_WIDTH = 0.09;
+// Sweet spot anchored to the top of the oscillation (phase = 1.0) so the
+// indicator must reach the apex of the timing arc, NBA 2K shot-meter style.
+const SWEET_SPOT_CENTER = 1.0;
+const SWEET_SPOT_HALF_WIDTH = 0.1;
 
 const BASE_SPREAD_PCT = 0.04;
 const WORST_SPREAD_ADD = 0.18;

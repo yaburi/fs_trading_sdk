@@ -10,7 +10,6 @@ import { MarketIcon } from '../components/MarketIcon';
 import { AuthSheet } from '../components/AuthSheet';
 import { Pitch } from '../game/Pitch';
 import { useKickEngine } from '../game/useKickEngine';
-import { TimingMeter } from '../game/TimingMeter';
 import { WindChip } from '../game/WindChip';
 import { useComposedBelief } from '../game/useComposedBelief';
 import { useRound, ROUND_CONSTANTS } from '../state/RoundContext';
@@ -26,6 +25,16 @@ export default function Game() {
   const kicksRemaining = ROUND_CONSTANTS.MAX_KICKS - round.kicks.length;
   const { isAuthenticated } = useAuth();
   const [authOpen, setAuthOpen] = useState(false);
+  const [pendingSubmit, setPendingSubmit] = useState(false);
+
+  // After guest taps Submit, sign-in success advances them to /confirm.
+  useEffect(() => {
+    if (isAuthenticated && pendingSubmit) {
+      setPendingSubmit(false);
+      setAuthOpen(false);
+      navigate(`/m/${marketId}/confirm`);
+    }
+  }, [isAuthenticated, pendingSubmit, marketId, navigate]);
 
   // Live payout preview, debounced. Skipped for guests because the SDK client
   // rejects all POSTs without a token; sign-in is offered inline instead.
@@ -93,26 +102,140 @@ export default function Game() {
   const showWindChip = engine.state !== 'ready' || round.kicks.length > 0;
   const showTiming = engine.state === 'timing' || engine.state === 'flying';
 
+  // Curved shot-meter overlay. Visible while picking timing (and frozen during
+  // flight so the user can see where they released).
+  const timing = useMemo(
+    () =>
+      showTiming
+        ? {
+            phaseRef: engine.timingPhaseRef,
+            sweetSpotHalfWidth: engine.sweetSpot.halfWidth,
+            locked: engine.state === 'flying',
+          }
+        : null,
+    [showTiming, engine.timingPhaseRef, engine.sweetSpot.halfWidth, engine.state],
+  );
+
   const primaryDisabled =
     !market ||
     kicksRemaining === 0 ||
     engine.state === 'flying' ||
     engine.state === 'landed';
 
+  // Three numbers from the curves:
+  //  - expected: ∫ belief(x) · payout(x) dx -- probability-weighted payout
+  //    under the user's own belief. Note: uses the user's belief, so a
+  //    contrarian "chasing thin-crowd zones" bet can self-confirm a big
+  //    Expected. The alignment metric below counterbalances that.
+  //  - bestCase: global ceiling, straight from the server.
+  //  - crowdAlignment: Bhattacharyya coefficient between the user's belief
+  //    and the crowd's belief. Bounded [0, 1]. Tells the user how much their
+  //    bet actually overlaps with where the market thinks the outcome will
+  //    land -- a low number flags a contrarian bet even when Expected is fat.
+  const payoutSummary = useMemo(() => {
+    if (!payout || !composed) return null;
+    if (!payout.previews || payout.previews.length === 0) return null;
+    const sorted = [...payout.previews].sort((a, b) => a.outcome - b.outcome);
+    const payoutAt = (x: number): number => {
+      if (x <= sorted[0].outcome) return sorted[0].payout;
+      const last = sorted[sorted.length - 1];
+      if (x >= last.outcome) return last.payout;
+      for (let i = 1; i < sorted.length; i++) {
+        const a = sorted[i - 1];
+        const b = sorted[i];
+        if (x >= a.outcome && x <= b.outcome) {
+          const t = (x - a.outcome) / (b.outcome - a.outcome);
+          return a.payout + t * (b.payout - a.payout);
+        }
+      }
+      return last.payout;
+    };
+
+    // Trapezoidal integration of payout(x) · belief(x) dx over the user's
+    // belief PDF. evaluateDensityCurve returns a normalized density so the
+    // result is the expectation directly -- no further scaling.
+    const pts = composed.curve.points;
+    let expected = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1];
+      const b = pts[i];
+      const ga = payoutAt(a.x) * a.y;
+      const gb = payoutAt(b.x) * b.y;
+      expected += ((ga + gb) / 2) * (b.x - a.x);
+    }
+
+    // Bhattacharyya coefficient: ∫ √(user(x) · crowd(x)) dx. Both PDFs are
+    // sampled by evaluateDensityCurve on the same uniform grid, so we can
+    // zip pointwise. If the consensus isn't loaded yet, skip -- the row will
+    // just not render.
+    let crowdAlignment: number | null = null;
+    if (consensus && consensus.points.length === pts.length) {
+      const cPts = consensus.points;
+      let bc = 0;
+      for (let i = 1; i < pts.length; i++) {
+        const ya = Math.sqrt(Math.max(0, pts[i - 1].y) * Math.max(0, cPts[i - 1].y));
+        const yb = Math.sqrt(Math.max(0, pts[i].y) * Math.max(0, cPts[i].y));
+        bc += ((ya + yb) / 2) * (pts[i].x - pts[i - 1].x);
+      }
+      crowdAlignment = Math.max(0, Math.min(1, bc));
+    }
+
+    return { expected, bestCase: payout.maxPayout, crowdAlignment };
+  }, [payout, composed, consensus]);
+
+  // Color the expected figure by direction vs stake so the user can see win
+  // vs loss without an inline delta. Threshold cents so a near-break-even bet
+  // reads as neutral text instead of pseudo-positive.
+  const expectedColor = useMemo(() => {
+    if (!payoutSummary) return 'var(--sp-text)';
+    const delta = payoutSummary.expected - round.stake;
+    if (delta > 0.05) return 'var(--sp-positive)';
+    if (delta < -0.05) return 'var(--sp-negative)';
+    return 'var(--sp-text)';
+  }, [payoutSummary, round.stake]);
+
+  const canFinalize = round.kicks.length > 0 && engine.state === 'ready';
+  const handleSubmit = () => {
+    if (!canFinalize) return;
+    if (!isAuthenticated) {
+      setPendingSubmit(true);
+      setAuthOpen(true);
+      return;
+    }
+    navigate(`/m/${marketId}/confirm`);
+  };
+  const handleClear = () => {
+    if (!canFinalize) return;
+    round.resetKicks();
+  };
+
   return (
     <PageShell
       header={<Header onBack={() => navigate(-1)} centerLabel="Free kick" />}
       footer={
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <Pill
-            variant="secondary"
-            size="lg"
-            fullWidth
-            disabled={round.kicks.length === 0 || engine.state !== 'ready'}
-            onClick={() => navigate(`/m/${marketId}/confirm`)}
-          >
-            Done · set belief
-          </Pill>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <Pill
+              variant="ghost"
+              size="md"
+              fullWidth
+              disabled={!canFinalize}
+              onClick={handleClear}
+            >
+              Reset
+            </Pill>
+            <Pill
+              variant="secondary"
+              size="md"
+              fullWidth
+              disabled={!canFinalize}
+              onClick={handleSubmit}
+            >
+              Submit
+            </Pill>
+          </div>
+
           <Pill
             variant="primary"
             size="lg"
@@ -120,7 +243,11 @@ export default function Game() {
             disabled={primaryDisabled}
             onClick={engine.primaryAction}
           >
-            {kicksRemaining === 0 ? 'Out of kicks' : engine.primaryLabel}
+            {kicksRemaining === 0
+              ? 'Out of kicks'
+              : engine.state === 'ready'
+                ? 'Kick'
+                : engine.primaryLabel}
           </Pill>
         </div>
       }
@@ -173,6 +300,7 @@ export default function Game() {
             belief={composed?.curve ?? null}
             ballTarget={ballTarget}
             onBallSettled={engine.onLanded}
+            timing={timing}
           />
         ) : (
           <div
@@ -202,135 +330,132 @@ export default function Game() {
           aimOutcome={
             engine.aimX != null && market
               ? formatOutcome(
-                  market.config.lowerBound +
-                    engine.aimX * (market.config.upperBound - market.config.lowerBound),
-                  market.decimals ?? 0,
-                  market.xAxisUnits || '',
-                )
+                market.config.lowerBound +
+                engine.aimX * (market.config.upperBound - market.config.lowerBound),
+                market.decimals ?? 0,
+                market.xAxisUnits || '',
+              )
               : null
           }
         />
       </div>
 
-      {/* Composed belief summary, appears after first kick.
-       * Two columns: your call (mean + spread) on the left, best payout
-       * (the headline figure) on the right. */}
+      {/* Bet summary, appears after first kick. Three figures across the card:
+       *   STAKE  ·  EXPECTED (probability-weighted under your belief)  ·  BEST CASE
+       * with a "if the crowd is right" anchor underneath. The user's belief
+       * shape is shown on the pitch above; we don't try to summarise it as a
+       * Gaussian (mean ± σ) here -- that lies for multimodal kicks. */}
       {composed && market && (
         <Card padding="md" tone="inset">
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              justifyContent: 'space-between',
-              gap: '12px',
-            }}
-          >
-            <div style={{ minWidth: 0 }}>
-              <div className="sp-uppercase sp-secondary" style={{ marginBottom: '2px' }}>
-                Your call
-              </div>
-              <div className="sp-display-md" style={{ fontSize: '20px' }}>
-                <span className="sp-mono">
-                  ~
-                  {composed.stats.mean.toLocaleString(undefined, {
-                    minimumFractionDigits: market.decimals ?? 0,
-                    maximumFractionDigits: market.decimals ?? 0,
-                  })}
-                </span>
-                {market.xAxisUnits && (
-                  <span
-                    className="sp-secondary"
-                    style={{ fontSize: '13px', marginLeft: '6px' }}
-                  >
-                    {market.xAxisUnits}
-                  </span>
-                )}
-              </div>
+          {isAuthenticated ? (
+            <>
               <div
-                className="sp-secondary"
-                style={{ fontSize: '11px', marginTop: '4px' }}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr 1fr',
+                  gap: '10px',
+                  alignItems: 'flex-start',
+                }}
               >
-                ±
-                {composed.stats.stdDev.toLocaleString(undefined, {
-                  minimumFractionDigits: market.decimals ?? 0,
-                  maximumFractionDigits: (market.decimals ?? 0) + 1,
-                })}
-                {market.xAxisUnits ? ` ${market.xAxisUnits}` : ''} confidence
-              </div>
-            </div>
-            <div style={{ textAlign: 'right', flexShrink: 0 }}>
-              <div className="sp-uppercase sp-secondary" style={{ marginBottom: '2px' }}>
-                Best payout
-              </div>
-              {isAuthenticated ? (
-                <>
-                  <div className="sp-display-md" style={{ fontSize: '20px' }}>
-                    {payout ? (
-                      <span className="sp-mono" style={{ color: 'var(--sp-positive)' }}>
-                        ${payout.maxPayout.toFixed(2)}
-                      </span>
-                    ) : (
-                      <span className="sp-secondary" style={{ fontSize: '14px' }}>
-                        {payoutLoading ? 'previewing…' : '–'}
-                      </span>
-                    )}
-                  </div>
-                  <div
-                    className="sp-secondary"
-                    style={{ fontSize: '11px', marginTop: '4px' }}
-                  >
-                    {payout
-                      ? `if outcome ≈ ${payout.maxPayoutOutcome.toLocaleString(undefined, {
-                          minimumFractionDigits: market.decimals ?? 0,
-                          maximumFractionDigits: market.decimals ?? 0,
-                        })}`
-                      : `staking $${round.stake.toFixed(round.stake % 1 === 0 ? 0 : 2)}`}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <button
-                    onClick={() => setAuthOpen(true)}
-                    style={{
-                      color: 'var(--sp-accent)',
-                      fontFamily: 'var(--sp-font-body)',
-                      fontSize: '15px',
-                      fontWeight: 600,
-                      padding: 0,
-                      lineHeight: 1.2,
-                    }}
-                  >
-                    Sign in to see →
-                  </button>
-                  <div
-                    className="sp-secondary"
-                    style={{ fontSize: '11px', marginTop: '4px' }}
-                  >
-                    staking ${round.stake.toFixed(round.stake % 1 === 0 ? 0 : 2)}
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </Card>
-      )}
+                <SummaryCell label="Stake">
+                  <span className="sp-mono" style={{ color: 'var(--sp-text)' }}>
+                    ${formatPayout(round.stake)}
+                  </span>
+                </SummaryCell>
 
-      {/* Timing meter (visible during the timing phase) */}
-      {showTiming && (
-        <Card padding="md" tone="inset">
-          <TimingMeter
-            phaseRef={engine.timingPhaseRef}
-            sweetSpotCenter={engine.sweetSpot.center}
-            sweetSpotHalfWidth={engine.sweetSpot.halfWidth}
-            locked={engine.state === 'flying'}
-          />
+                <SummaryCell label="Expected" align="center">
+                  {payoutSummary ? (
+                    <span className="sp-mono" style={{ color: expectedColor }}>
+                      ${formatPayout(payoutSummary.expected)}
+                    </span>
+                  ) : (
+                    <span className="sp-secondary" style={{ fontSize: '14px' }}>
+                      {payoutLoading ? 'previewing…' : '–'}
+                    </span>
+                  )}
+                </SummaryCell>
+
+                <SummaryCell label="Best case" align="right">
+                  {payoutSummary ? (
+                    <span
+                      className="sp-mono"
+                      style={{ color: 'var(--sp-positive)' }}
+                    >
+                      ${formatPayout(payoutSummary.bestCase)}
+                    </span>
+                  ) : (
+                    <span className="sp-secondary" style={{ fontSize: '14px' }}>
+                      –
+                    </span>
+                  )}
+                </SummaryCell>
+              </div>
+
+              {payoutSummary?.crowdAlignment != null && (
+                <div
+                  className="sp-secondary"
+                  style={{
+                    marginTop: '10px',
+                    paddingTop: '10px',
+                    borderTop: '1px solid var(--sp-border-subtle)',
+                    fontSize: '11px',
+                    textAlign: 'center',
+                  }}
+                >
+                  <span
+                    className="sp-mono"
+                    style={{ color: 'var(--sp-text)', fontWeight: 600 }}
+                  >
+                    {Math.round(payoutSummary.crowdAlignment * 100)}%
+                  </span>{' '}
+                  aligned with the crowd
+                </div>
+              )}
+            </>
+          ) : (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px',
+              }}
+            >
+              <div>
+                <div
+                  className="sp-uppercase sp-secondary"
+                  style={{ marginBottom: '2px' }}
+                >
+                  Stake
+                </div>
+                <div className="sp-display-md" style={{ fontSize: '20px' }}>
+                  <span className="sp-mono">${formatPayout(round.stake)}</span>
+                </div>
+              </div>
+              <button
+                onClick={() => setAuthOpen(true)}
+                style={{
+                  color: 'var(--sp-accent)',
+                  fontFamily: 'var(--sp-font-body)',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  padding: 0,
+                  lineHeight: 1.2,
+                }}
+              >
+                Sign in to see payouts →
+              </button>
+            </div>
+          )}
         </Card>
       )}
 
       <AuthSheet
         open={authOpen}
-        onClose={() => setAuthOpen(false)}
-        onLogin={() => setAuthOpen(false)}
+        onClose={() => {
+          setAuthOpen(false);
+          setPendingSubmit(false);
+        }}
       />
     </PageShell>
   );
@@ -352,6 +477,39 @@ function KickDots({ taken, total }: { taken: number; total: number }) {
         />
       ))}
     </span>
+  );
+}
+
+// Compact dollar formatting. Drop cents when the figure is large enough that
+// cents are noise; keep two decimals at the low end so a wide-bet "$5.10"
+// still reads as $5.10 (not $5).
+function formatPayout(value: number): string {
+  if (value >= 100) return value.toFixed(0);
+  if (value >= 10) return value.toFixed(1);
+  return value.toFixed(2);
+}
+
+function SummaryCell({
+  label,
+  align = 'left',
+  children,
+}: {
+  label: string;
+  align?: 'left' | 'center' | 'right';
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={{ textAlign: align, minWidth: 0 }}>
+      <div className="sp-uppercase sp-secondary" style={{ marginBottom: '2px' }}>
+        {label}
+      </div>
+      <div
+        className="sp-display-md"
+        style={{ fontSize: '20px', lineHeight: 1.15 }}
+      >
+        {children}
+      </div>
+    </div>
   );
 }
 
@@ -377,10 +535,10 @@ function PhaseHint({
     return (
       <span style={baseStyle}>
         {kicksTaken === 0
-          ? 'Step up. Tap Start kick when you\'re ready.'
+          ? 'Step up. Tap Kick when you\'re ready.'
           : kicksTaken < ROUND_CONSTANTS.MAX_KICKS
-          ? 'Take another kick or finalize your belief.'
-          : 'Max kicks taken. Finalize when ready.'}
+            ? 'Take another kick or submit your belief.'
+            : 'Max kicks taken. Submit when ready.'}
       </span>
     );
   }
@@ -390,14 +548,8 @@ function PhaseHint({
   if (state === 'timing') {
     return (
       <span style={baseStyle}>
-        Tap Lock timing inside the coral band for a tight kick.
-        {aimOutcome ? ` Aim was ${aimOutcome}.` : ''}
+        Tap Lock when the meter reaches the green zone at the top.
       </span>
-    );
-  }
-  if (state === 'flying') {
-    return (
-      <span style={{ ...baseStyle, fontStyle: 'italic' }}>The ball is in flight…</span>
     );
   }
   return null;

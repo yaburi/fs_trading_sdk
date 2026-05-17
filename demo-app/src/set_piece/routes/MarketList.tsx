@@ -40,7 +40,7 @@ export default function MarketList() {
             lineHeight: 1.5,
           }}
         >
-          Pick a market. Aim, time, kick. Each kick shapes your prediction. The crowd is the goalkeeper.
+          Pick a market. Aim, time, kick. Each kick shapes your prediction. The goalkeeper is the crowd: where most people think it'll land.
         </p>
       </div>
 

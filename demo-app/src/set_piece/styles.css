@@ -158,6 +158,29 @@ select {
   color: inherit;
 }
 
+/* Stake input field — bordered container with a big mono number inside.
+ * Focus ring lives on the wrapping label so the inner input can stay borderless. */
+.sp-stake-field:focus-within {
+  border-color: var(--sp-accent) !important;
+  box-shadow: 0 0 0 4px var(--sp-accent-soft);
+}
+.sp-stake-field:hover {
+  border-color: var(--sp-text-muted);
+}
+.sp-stake-field input::selection {
+  background: var(--sp-accent-soft);
+}
+.sp-stake-field input:focus-visible {
+  outline: none;
+}
+.sp-stake-clear:hover {
+  opacity: 0.85 !important;
+}
+.sp-stake-clear:active {
+  opacity: 1 !important;
+  transform: translateY(-50%) scale(0.92) !important;
+}
+
 /* Stake slider, themed native range input */
 .sp-stake-slider {
   -webkit-appearance: none;

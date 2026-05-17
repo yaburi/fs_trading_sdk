@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import { useAuth } from '@functionspace/react';
 import { Pill } from './Pill';
-import { useNavigate } from 'react-router-dom';
+import { AuthSheet } from './AuthSheet';
 
 interface HeaderProps {
   /** Optional left-side back button. */
@@ -13,7 +14,7 @@ interface HeaderProps {
 
 export function Header({ onBack, centerLabel, showWallet = true }: HeaderProps) {
   const { user, isAuthenticated } = useAuth();
-  const navigate = useNavigate();
+  const [authOpen, setAuthOpen] = useState(false);
 
   return (
     <div
@@ -82,7 +83,7 @@ export function Header({ onBack, centerLabel, showWallet = true }: HeaderProps) 
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '64px', justifyContent: 'flex-end' }}>
         {isAuthenticated && user && showWallet ? (
           <button
-            onClick={() => navigate('/calls')}
+            onClick={() => setAuthOpen(true)}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -107,11 +108,13 @@ export function Header({ onBack, centerLabel, showWallet = true }: HeaderProps) 
             ${user.walletValue.toFixed(0)}
           </button>
         ) : !isAuthenticated ? (
-          <Pill size="sm" variant="ghost">
-            guest
+          <Pill size="sm" variant="secondary" onClick={() => setAuthOpen(true)}>
+            Sign in
           </Pill>
         ) : null}
       </div>
+
+      <AuthSheet open={authOpen} onClose={() => setAuthOpen(false)} />
     </div>
   );
 }

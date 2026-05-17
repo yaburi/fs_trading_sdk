@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth, useMarket } from '@functionspace/react';
 import { PageShell } from '../components/PageShell';
@@ -9,7 +9,7 @@ import { MarketIcon } from '../components/MarketIcon';
 import { useRound } from '../state/RoundContext';
 
 const HARD_CAP = 100;
-const STEP = 0.5;
+const MIN_STAKE = 1;
 const QUICK_PICKS = [1, 5, 10, 25];
 
 export default function Stake() {
@@ -42,10 +42,46 @@ export default function Stake() {
     });
   }, [market]);
 
-  const handlePick = (value: number) => setStake(Math.min(value, walletMax));
-  const handleMax = () => setStake(walletMax);
-  const handleSlider = (e: React.ChangeEvent<HTMLInputElement>) =>
-    setStake(Number(e.target.value));
+  const handlePick = (value: number) => {
+    const next = Math.min(value, walletMax);
+    setStake(next);
+    setDraft(formatStake(next));
+  };
+  const handleMax = () => {
+    setStake(walletMax);
+    setDraft(formatStake(walletMax));
+  };
+
+  // Local editable text so users can clear/retype freely without the
+  // committed stake jumping around as they type.
+  const [draft, setDraft] = useState(() => formatStake(stake));
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.replace(/[^0-9.]/g, '');
+    // collapse multiple dots
+    const parts = raw.split('.');
+    const cleaned = parts.length > 1 ? `${parts[0]}.${parts.slice(1).join('')}` : raw;
+    setDraft(cleaned);
+    const parsed = Number(cleaned);
+    if (cleaned !== '' && Number.isFinite(parsed)) {
+      setStake(Math.min(walletMax, Math.max(MIN_STAKE, parsed)));
+    }
+  };
+  const handleInputBlur = () => {
+    const parsed = Number(draft);
+    if (!Number.isFinite(parsed) || draft === '') {
+      setStake(MIN_STAKE);
+      setDraft(formatStake(MIN_STAKE));
+      return;
+    }
+    const clamped = Math.min(walletMax, Math.max(MIN_STAKE, parsed));
+    setStake(clamped);
+    setDraft(formatStake(clamped));
+  };
+  const handleClear = () => {
+    setDraft('');
+    setStake(MIN_STAKE);
+  };
 
   const handleContinue = () => navigate(`/m/${marketId}/play`);
 
@@ -92,7 +128,7 @@ export default function Stake() {
                 }}
               >
                 <span>
-                  Range:{' '}
+                  Range{' '}
                   <span className="sp-mono" style={{ color: 'var(--sp-text)' }}>
                     {market.config.lowerBound} – {market.config.upperBound}
                   </span>
@@ -127,77 +163,111 @@ export default function Stake() {
           <div className="sp-uppercase sp-secondary">Your stake</div>
           {isAuthenticated && user ? (
             <div className="sp-mono sp-secondary" style={{ fontSize: '11px' }}>
-              wallet ${user.walletValue.toFixed(2)}
+              Wallet ${user.walletValue.toFixed(2)}
             </div>
           ) : (
             <div className="sp-secondary" style={{ fontSize: '11px' }}>
-              capped at ${HARD_CAP} as guest
+              Capped at ${HARD_CAP} as guest
             </div>
           )}
         </div>
 
-        {/* Big number */}
-        <div
+        {/* Editable stake input */}
+        <label
+          className="sp-stake-field"
           style={{
+            position: 'relative',
             display: 'flex',
-            alignItems: 'baseline',
+            alignItems: 'center',
             justifyContent: 'center',
-            gap: '4px',
+            gap: '6px',
+            width: '100%',
             margin: '6px 0 18px',
+            padding: '18px 56px',
+            background: 'var(--sp-surface-2)',
+            border: '1px solid var(--sp-border)',
+            borderRadius: 'var(--sp-radius-md)',
+            cursor: 'text',
+            overflow: 'hidden',
+            transition: 'border-color 0.15s var(--sp-ease), box-shadow 0.15s var(--sp-ease)',
           }}
         >
           <span
-            className="sp-display"
             style={{
-              fontSize: '20px',
-              color: 'var(--sp-text-secondary)',
-              fontWeight: 700,
+              fontFamily: 'var(--sp-font-mono)',
+              fontSize: '32px',
+              color: 'var(--sp-text-muted)',
+              fontWeight: 500,
+              lineHeight: 1,
+              flexShrink: 0,
             }}
           >
             $
           </span>
-          <span
-            className="sp-display"
+          <input
+            type="text"
+            inputMode="decimal"
+            value={draft}
+            onChange={handleInputChange}
+            onBlur={handleInputBlur}
+            onFocus={(e) => e.currentTarget.select()}
+            aria-label="Stake amount"
             style={{
               fontFamily: 'var(--sp-font-mono)',
-              fontSize: '64px',
-              letterSpacing: '-0.04em',
+              fontSize: '48px',
+              letterSpacing: '-0.03em',
               fontWeight: 600,
               fontVariantNumeric: 'tabular-nums',
+              lineHeight: 1,
+              width: `${Math.max(1, draft.length)}ch`,
+              maxWidth: '100%',
+              minWidth: 0,
+              border: 'none',
+              outline: 'none',
+              background: 'transparent',
+              color: 'var(--sp-text)',
+              padding: 0,
+              textAlign: 'left',
             }}
-          >
-            {stake.toFixed(stake % 1 === 0 ? 0 : 2)}
-          </span>
-        </div>
-
-        {/* Slider */}
-        <input
-          type="range"
-          min={1}
-          max={walletMax}
-          step={STEP}
-          value={stake}
-          onChange={handleSlider}
-          className="sp-stake-slider"
-          aria-label="Stake amount"
-          style={
-            {
-              '--sp-fill': `${((stake - 1) / (walletMax - 1)) * 100}%`,
-            } as React.CSSProperties
-          }
-        />
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            marginTop: '6px',
-            fontSize: '11px',
-            color: 'var(--sp-text-muted)',
-          }}
-        >
-          <span className="sp-mono">$1</span>
-          <span className="sp-mono">${walletMax}</span>
-        </div>
+          />
+          {draft.length > 0 && (
+            <button
+              type="button"
+              aria-label="Clear stake"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={handleClear}
+              className="sp-stake-clear"
+              style={{
+                position: 'absolute',
+                right: '16px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                width: '22px',
+                height: '22px',
+                borderRadius: '999px',
+                background: 'var(--sp-text-muted)',
+                color: 'var(--sp-surface)',
+                border: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 0,
+                cursor: 'pointer',
+                opacity: 0.5,
+                transition: 'opacity 0.15s var(--sp-ease)',
+              }}
+            >
+              <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+                <path
+                  d="M2 2 L8 8 M8 2 L2 8"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </button>
+          )}
+        </label>
 
         {/* Quick picks */}
         <div
@@ -205,7 +275,6 @@ export default function Stake() {
             display: 'grid',
             gridTemplateColumns: 'repeat(5, 1fr)',
             gap: '6px',
-            marginTop: '16px',
           }}
         >
           {QUICK_PICKS.map((value) => {
@@ -269,6 +338,10 @@ export default function Stake() {
       </div>
     </PageShell>
   );
+}
+
+function formatStake(value: number): string {
+  return value % 1 === 0 ? value.toFixed(0) : value.toFixed(2);
 }
 
 function SkeletonMarket() {

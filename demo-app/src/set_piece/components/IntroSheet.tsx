@@ -50,7 +50,7 @@ const STEPS = [
     overline: 'Step 3',
     title: 'Stack kicks for a richer call',
     body:
-      "Take up to 5 kicks. Each one adds a region to your belief. Aim where the goalkeeper (the crowd) is faded for a bigger potential payout.",
+      "Take up to 5 kicks. Each one adds a region to your belief. The goalkeeper is the crowd: it covers where most people think the outcome will land. Aim where it's faded for a bigger potential payout.",
     badge: { bg: '#FCE7F3', fg: '#DB2777', glyph: glyphStack },
   },
 ];
