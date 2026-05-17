@@ -4,6 +4,7 @@ import {
   useAuth,
   useMarkets,
   usePositions,
+  usePreviewSell,
   useSell,
 } from '@functionspace/react';
 import type { MarketState, Position } from '@functionspace/core';
@@ -91,6 +92,7 @@ function TabButton({
   return (
     <button
       onClick={onClick}
+      className={active ? 'sp-tap' : 'sp-tap sp-tap-chip'}
       style={{
         padding: '6px 16px',
         borderRadius: '999px',
@@ -100,7 +102,6 @@ function TabButton({
         fontSize: '13px',
         boxShadow: active ? '0 1px 2px rgb(0 0 0 / 0.06)' : 'none',
         cursor: 'pointer',
-        transition: 'background 0.15s var(--sp-ease)',
       }}
     >
       {children}
@@ -171,7 +172,7 @@ function PositionsList({
         />
       ))}
       {showEmpty && (
-        <EmptyAcrossAllHint markets={markets} tab={tab} onPickMarket={onPickMarket} />
+        <EmptyAcrossAllHint tab={tab} />
       )}
     </div>
   );
@@ -252,6 +253,7 @@ function MarketPositionsBlock({
         </div>
         <button
           onClick={() => onPickMarket(market.marketId)}
+          className="sp-tap sp-tap-surface"
           style={{
             padding: '6px 12px',
             borderRadius: '999px',
@@ -260,6 +262,7 @@ function MarketPositionsBlock({
             fontSize: '12px',
             color: 'var(--sp-text-secondary)',
             fontWeight: 500,
+            cursor: 'pointer',
           }}
         >
           View Market →
@@ -285,6 +288,7 @@ function PositionRow({
   tab: TabKey;
 }) {
   const sell = useSell(market.marketId);
+  const previewSell = usePreviewSell(market.marketId);
   const decimals = market.decimals ?? 0;
   const formatOutcome = (n: number) =>
     n.toLocaleString(undefined, {
@@ -292,11 +296,33 @@ function PositionRow({
       maximumFractionDigits: decimals,
     });
 
+  // Live cash-out preview for open positions. The raw `claims` number is an
+  // internal accounting unit that reads like dollars but isn't, so we show
+  // the actual sell payout instead. previewSell.execute is imperative; we
+  // fire it once per position and abort on unmount.
+  const [cashOut, setCashOut] = useState<number | null>(null);
+  useEffect(() => {
+    if (position.status !== 'open') return;
+    const controller = new AbortController();
+    previewSell
+      .execute(position.positionId as unknown as number, {
+        signal: controller.signal,
+      })
+      .then((res) => setCashOut(res.collateralReturned))
+      .catch(() => {
+        /* keep cashOut null on error; row degrades gracefully */
+      });
+    return () => controller.abort();
+    // execute is stable per marketId; positionId is the unit of work.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [position.positionId, position.status]);
+
   const handleSell = async () => {
     try {
-      // SDK type quirk: Position.positionId is string|number but
-      // useSell.execute wants number. API always returns numerics in practice.
-      await sell.execute(Number(position.positionId));
+      // SDK type quirk: useSell.execute is typed number, but the underlying
+      // sell() accepts string|number and the API can return either. Coercing
+      // with Number() NaNs on non-numeric ids, so pass through as-is.
+      await sell.execute(position.positionId as unknown as number);
     } catch {
       /* error rendered below */
     }
@@ -334,11 +360,18 @@ function PositionRow({
               <>
                 aim: <span className="sp-mono" style={{ color: 'var(--sp-text)' }}>
                   {formatOutcome(position.prediction)}
-                </span>{' '}
-                ·{' '}
+                </span>
+                {tab === 'open' && <> · </>}
               </>
             )}
-            claims: <span className="sp-mono">{position.claims.toFixed(2)}</span>
+            {tab === 'open' && (
+              <>
+                cash out:{' '}
+                <span className="sp-mono" style={{ color: 'var(--sp-text)' }}>
+                  {cashOut != null ? `$${cashOut.toFixed(2)}` : '…'}
+                </span>
+              </>
+            )}
           </div>
         </div>
 
@@ -377,34 +410,27 @@ function PositionRow({
 
 /** Empty-state card, only rendered when every market has reported zero
  * matching positions for the active tab. */
-function EmptyAcrossAllHint({
-  markets,
-  tab,
-  onPickMarket,
-}: {
-  markets: MarketState[];
-  tab: TabKey;
-  onPickMarket: (id: string | number) => void;
-}) {
+function EmptyAcrossAllHint({ tab }: { tab: TabKey }) {
+  const navigate = useNavigate();
   return (
     <Card tone="inset" padding="md">
       <div className="sp-secondary" style={{ fontSize: '13px', lineHeight: 1.5 }}>
         {tab === 'open' ? (
           <>
             Open positions show up here as soon as a kick lands.{' '}
-            {markets.length > 0 && (
-              <button
-                onClick={() => onPickMarket(markets[0].marketId)}
-                style={{
-                  color: 'var(--sp-accent)',
-                  background: 'transparent',
-                  padding: 0,
-                  fontWeight: 600,
-                }}
-              >
-                Pick a market →
-              </button>
-            )}
+            <button
+              onClick={() => navigate('/')}
+              className="sp-tap sp-tap-link"
+              style={{
+                color: 'var(--sp-accent)',
+                background: 'transparent',
+                padding: 0,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Pick a market →
+            </button>
           </>
         ) : (
           <>Closed positions and historical kicks will show up here once they settle.</>

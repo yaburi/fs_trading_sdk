@@ -71,13 +71,10 @@ export function PageShell({ children, header, footer }: PageShellProps) {
       )}
 
       <main
+        className={footer ? 'sp-pageshell-main sp-pageshell-main--with-footer' : 'sp-pageshell-main'}
         style={{
           width: '100%',
           maxWidth: 'var(--sp-max-width)',
-          padding: footer
-            ? '20px 16px calc(96px + env(safe-area-inset-bottom))'
-            : '20px 16px 32px',
-          flex: 1,
           display: 'flex',
           flexDirection: 'column',
           gap: '20px',
@@ -87,26 +84,8 @@ export function PageShell({ children, header, footer }: PageShellProps) {
       </main>
 
       {footer && (
-        <div
-          style={{
-            position: 'sticky',
-            bottom: 0,
-            width: '100%',
-            background: 'var(--sp-glass-footer)',
-            backdropFilter: 'blur(12px)',
-            WebkitBackdropFilter: 'blur(12px)',
-            borderTop: '1px solid var(--sp-border-subtle)',
-          }}
-        >
-          <div
-            style={{
-              maxWidth: 'var(--sp-max-width)',
-              margin: '0 auto',
-              padding: '12px 16px calc(12px + env(safe-area-inset-bottom))',
-            }}
-          >
-            {footer}
-          </div>
+        <div className="sp-pageshell-footer">
+          <div className="sp-pageshell-footer-inner">{footer}</div>
         </div>
       )}
     </div>

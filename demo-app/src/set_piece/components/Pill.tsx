@@ -43,97 +43,133 @@ export function Pill({
 
   const variantStyles: Record<Variant, CSSProperties> = {
     primary: {
-      // Deep near-black ink. Subtle top sheen makes it look enameled rather
-      // than a paint chip. The shadow stack reads as "raised dark pebble."
+      // Deep near-black ink. Strong top sheen, deeper ambient + cast shadows
+      // so the pebble reads as substantially raised off the surface.
       background:
-        'linear-gradient(180deg, #2A2A2C 0%, #131315 60%, #050507 100%)',
+        'linear-gradient(180deg, #2E2E30 0%, #161618 55%, #060608 100%)',
       color: 'var(--sp-on-primary)',
       boxShadow: [
-        'inset 0 1px 0 rgba(255,255,255,0.18)',
-        'inset 0 -1px 0 rgba(0,0,0,0.55)',
-        'inset 0 0 0 1px rgba(0,0,0,0.65)',
-        '0 1px 0 rgba(255,255,255,0.6)',
-        '0 2px 4px rgba(0,0,0,0.18)',
-        '0 6px 14px rgba(0,0,0,0.18)',
+        'inset 0 1px 0 rgba(255,255,255,0.22)',
+        'inset 0 0 0 1px rgba(0,0,0,0.7)',
+        '0 2px 4px rgba(0,0,0,0.22)',
+        '0 8px 18px rgba(0,0,0,0.18)',
       ].join(', '),
-      textShadow: '0 -1px 0 rgba(0,0,0,0.4)',
+      textShadow: '0 -1px 0 rgba(0,0,0,0.45)',
     },
     accent: {
       // Warm coral with a heated highlight. Reads like a hot enamel pin —
       // appropriate for the "GOAL!" CTA on the confirm screen.
       background:
-        'linear-gradient(180deg, #FF8B65 0%, #FF6B3D 55%, #E2542B 100%)',
+        'linear-gradient(180deg, #FF9572 0%, #FF6B3D 55%, #DD4E27 100%)',
       color: 'var(--sp-on-accent)',
       boxShadow: [
-        'inset 0 1px 0 rgba(255,255,255,0.45)',
-        'inset 0 -1px 0 rgba(120,30,0,0.45)',
-        'inset 0 0 0 1px rgba(180,60,15,0.5)',
-        '0 1px 0 rgba(255,255,255,0.55)',
-        '0 2px 6px rgba(226, 84, 43, 0.35)',
-        '0 8px 18px rgba(226, 84, 43, 0.28)',
+        'inset 0 1px 0 rgba(255,255,255,0.5)',
+        'inset 0 0 0 1px rgba(180,60,15,0.55)',
+        '0 2px 6px rgba(226, 84, 43, 0.4)',
+        '0 10px 22px rgba(226, 84, 43, 0.26)',
       ].join(', '),
-      textShadow: '0 -1px 0 rgba(120, 30, 0, 0.35)',
+      textShadow: '0 -1px 0 rgba(120, 30, 0, 0.4)',
     },
     secondary: {
-      // Bright porcelain card. Crisp top highlight, soft hairline edge, then
-      // a low drop shadow — sits "on" the surface rather than "in" it.
+      // Bright porcelain card. Crisp top highlight, hairline edge, layered
+      // soft drop — sits firmly on the surface, not floating.
       background:
-        'linear-gradient(180deg, #FFFFFF 0%, #F4F4F5 100%)',
+        'linear-gradient(180deg, #FFFFFF 0%, #F1F1F3 100%)',
       color: 'var(--sp-text)',
       boxShadow: [
-        'inset 0 1px 0 rgba(255,255,255,0.95)',
-        'inset 0 -1px 0 rgba(0,0,0,0.06)',
-        'inset 0 0 0 1px rgba(0,0,0,0.08)',
-        '0 1px 2px rgba(0,0,0,0.06)',
-        '0 4px 10px rgba(0,0,0,0.06)',
+        'inset 0 1px 0 rgba(255,255,255,1)',
+        'inset 0 0 0 1px rgba(0,0,0,0.09)',
+        '0 1px 2px rgba(0,0,0,0.08)',
+        '0 5px 12px rgba(0,0,0,0.06)',
       ].join(', '),
     },
     ghost: {
       // No surface, no shadow — pure text affordance. Hover/active still get
-      // a faint surface to confirm the press.
+      // a faint inset surface to confirm the touch.
       background: 'transparent',
       color: 'var(--sp-text-secondary)',
       boxShadow: 'none',
     },
   };
 
-  // Style applied during the brief mousedown depressed state. Drops the
-  // button by 1px and trims a shadow layer so it visually settles.
-  const pressedStyles: Record<Variant, CSSProperties> = {
+  // Style applied while the pointer is over the button (but not pressed).
+  // Each variant brightens its gradient one stop and grows the drop shadow
+  // — so the surface reads as "a light just hit it" without the button
+  // physically moving toward the cursor. Gated to true mouse pointers below.
+  const hoverStyles: Record<Variant, CSSProperties> = {
     primary: {
       background:
-        'linear-gradient(180deg, #131315 0%, #050507 100%)',
+        'linear-gradient(180deg, #3C3C3F 0%, #1D1D20 55%, #0B0B0D 100%)',
       boxShadow: [
-        'inset 0 1px 2px rgba(0,0,0,0.45)',
-        'inset 0 -1px 0 rgba(255,255,255,0.05)',
-        'inset 0 0 0 1px rgba(0,0,0,0.65)',
-        '0 1px 0 rgba(255,255,255,0.35)',
-        '0 1px 2px rgba(0,0,0,0.12)',
+        'inset 0 1px 0 rgba(255,255,255,0.28)',
+        'inset 0 0 0 1px rgba(0,0,0,0.7)',
+        '0 4px 10px rgba(0,0,0,0.28)',
+        '0 14px 28px rgba(0,0,0,0.22)',
       ].join(', '),
     },
     accent: {
       background:
-        'linear-gradient(180deg, #E2542B 0%, #C73E18 100%)',
+        'linear-gradient(180deg, #FFA98E 0%, #FF7A50 55%, #E25530 100%)',
       boxShadow: [
-        'inset 0 1px 2px rgba(120,30,0,0.45)',
-        'inset 0 -1px 0 rgba(255,255,255,0.15)',
-        'inset 0 0 0 1px rgba(180,60,15,0.6)',
-        '0 1px 0 rgba(255,255,255,0.4)',
-        '0 1px 3px rgba(226, 84, 43, 0.3)',
+        'inset 0 1px 0 rgba(255,255,255,0.6)',
+        'inset 0 0 0 1px rgba(180,60,15,0.55)',
+        '0 4px 12px rgba(226, 84, 43, 0.5)',
+        '0 16px 32px rgba(226, 84, 43, 0.3)',
       ].join(', '),
     },
     secondary: {
       background:
-        'linear-gradient(180deg, #EFEFF1 0%, #FAFAFB 100%)',
+        'linear-gradient(180deg, #FFFFFF 0%, #F7F7F9 100%)',
       boxShadow: [
-        'inset 0 1px 2px rgba(0,0,0,0.08)',
+        'inset 0 1px 0 rgba(255,255,255,1)',
+        'inset 0 0 0 1px rgba(0,0,0,0.11)',
+        '0 2px 5px rgba(0,0,0,0.1)',
+        '0 10px 22px rgba(0,0,0,0.08)',
+      ].join(', '),
+    },
+    ghost: {
+      background: 'rgba(15,15,16,0.05)',
+      boxShadow: 'inset 0 1px 1.5px rgba(0,0,0,0.04)',
+    },
+  };
+
+  // Style applied during the brief mousedown depressed state. The button
+  // collapses its drop shadow and flips to an inset shadow so it reads as
+  // "pushed in" — no translation, all visual. Pairs with the scale(0.97)
+  // applied below for the mechanical squish.
+  const pressedStyles: Record<Variant, CSSProperties> = {
+    primary: {
+      background:
+        'linear-gradient(180deg, #101012 0%, #040406 100%)',
+      boxShadow: [
+        'inset 0 2px 3px rgba(0,0,0,0.5)',
+        'inset 0 -1px 0 rgba(255,255,255,0.06)',
+        'inset 0 0 0 1px rgba(0,0,0,0.7)',
+        '0 1px 0 rgba(255,255,255,0.35)',
+      ].join(', '),
+    },
+    accent: {
+      background:
+        'linear-gradient(180deg, #D14E26 0%, #B83E16 100%)',
+      boxShadow: [
+        'inset 0 2px 3px rgba(120,30,0,0.5)',
+        'inset 0 -1px 0 rgba(255,255,255,0.2)',
+        'inset 0 0 0 1px rgba(180,60,15,0.65)',
+        '0 1px 0 rgba(255,255,255,0.4)',
+      ].join(', '),
+    },
+    secondary: {
+      background:
+        'linear-gradient(180deg, #EBEBED 0%, #F7F7F8 100%)',
+      boxShadow: [
+        'inset 0 2px 3px rgba(0,0,0,0.1)',
         'inset 0 -1px 0 rgba(255,255,255,0.6)',
         'inset 0 0 0 1px rgba(0,0,0,0.1)',
       ].join(', '),
     },
     ghost: {
-      background: 'rgba(0,0,0,0.04)',
-      boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.04)',
+      background: 'rgba(0,0,0,0.07)',
+      boxShadow: 'inset 0 1.5px 3px rgba(0,0,0,0.06)',
     },
   };
 
@@ -144,9 +180,21 @@ export function Pill({
     if (base.boxShadow) el.style.boxShadow = base.boxShadow as string;
   };
 
+  const applyHover = (el: HTMLButtonElement) => {
+    const hover = hoverStyles[variant];
+    // No movement — the brightened gradient + grown shadow do all the work,
+    // so the button reads as "lit" not "lifted".
+    el.style.transform = '';
+    if (hover.background) el.style.background = hover.background as string;
+    if (hover.boxShadow) el.style.boxShadow = hover.boxShadow as string;
+  };
+
   const applyPress = (el: HTMLButtonElement) => {
     const press = pressedStyles[variant];
-    el.style.transform = 'translateY(1px) scale(0.985)';
+    // Centered scale-down for the mechanical squish; the inset shadow flip
+    // in pressedStyles is what sells "pushed in". No translateY — staying
+    // put keeps the button anchored under the cursor.
+    el.style.transform = 'scale(0.97)';
     if (press.background) el.style.background = press.background as string;
     if (press.boxShadow) el.style.boxShadow = press.boxShadow as string;
   };
@@ -180,11 +228,23 @@ export function Pill({
         ...variantStyles[variant],
         ...style,
       }}
+      onPointerEnter={(e) => {
+        // Gate hover to true mouse pointers so a tap on a touch device
+        // doesn't briefly flash the hover state before the press kicks in.
+        if (!disabled && e.pointerType === 'mouse') applyHover(e.currentTarget);
+      }}
+      onPointerLeave={(e) => {
+        if (e.pointerType === 'mouse') restoreStyle(e.currentTarget);
+      }}
       onMouseDown={(e) => {
         if (!disabled) applyPress(e.currentTarget);
       }}
-      onMouseUp={(e) => restoreStyle(e.currentTarget)}
-      onMouseLeave={(e) => restoreStyle(e.currentTarget)}
+      onMouseUp={(e) => {
+        // After a press, drop back to hover state (mouse is still over the
+        // button); the next pointerLeave restores base.
+        if (!disabled) applyHover(e.currentTarget);
+        else restoreStyle(e.currentTarget);
+      }}
       onTouchStart={(e) => {
         if (!disabled) applyPress(e.currentTarget);
       }}

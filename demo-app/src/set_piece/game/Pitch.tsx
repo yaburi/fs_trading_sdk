@@ -81,7 +81,7 @@ interface PitchProps {
   onBallSettled?: () => void;
   /** When set, the curved shot-meter overlay is rendered on the right side. */
   timing?: TimingDescriptor | null;
-  /** Reshapes the ball's flight curve per shot. Default `strike`. */
+  /** Reshapes the ball's flight curve per shot. Default `direct`. */
   shotType?: ShotType;
 }
 
@@ -94,7 +94,7 @@ export function Pitch({
   ballTarget,
   onBallSettled,
   timing,
-  shotType = 'strike',
+  shotType = 'direct',
 }: PitchProps) {
   const { lowerBound, upperBound } = market.config;
   const decimals = market.decimals ?? 0;
@@ -112,12 +112,8 @@ export function Pitch({
         width: '100%',
         borderRadius: 'var(--sp-radius-md)',
         overflow: 'hidden',
-        // Layered: distant sky → stand → grass. Mimics what you'd see
-        // from a low camera behind the penalty spot.
-        background: [
-          'radial-gradient(ellipse 90% 60% at 50% 14%, rgba(255, 240, 200, 0.18), transparent 60%)',
-          'linear-gradient(180deg, #1B2541 0%, #2A3960 22%, #6B8E5F 38%, #6FA265 60%, #7DB672 100%)',
-        ].join(', '),
+        background:
+          'radial-gradient(ellipse 80% 60% at 50% 20%, var(--sp-pitch-grass-glow), var(--sp-pitch-grass-fade) 70%), linear-gradient(180deg, var(--sp-pitch-top) 0%, var(--sp-pitch-bot) 100%)',
       }}
     >
       <svg
@@ -161,92 +157,23 @@ export function Pitch({
             <stop offset="100%" stopColor="#B7B7B6" />
           </linearGradient>
 
-          {/* Grass with a hint of mowed stripes. Subtle alternating bands of
-           *  brightness paint a "diagonal stripe" pattern across the field. */}
-          <pattern id="grassStripes" x="0" y="0" width="32" height="32" patternUnits="userSpaceOnUse">
-            <rect width="32" height="32" fill="transparent" />
-            <rect x="0" y="0" width="16" height="32" fill="rgba(255,255,255,0.025)" />
-          </pattern>
-
-          {/* Net: a tight diamond mesh applied as a fill pattern over the
-           *  goal interior. White with very low opacity so the keeper /
-           *  heat zones still read through. */}
-          <pattern id="goalNet" x="0" y="0" width="9" height="9" patternUnits="userSpaceOnUse">
-            <path
-              d="M 0 4.5 L 4.5 0 L 9 4.5 L 4.5 9 Z"
-              fill="none"
-              stroke="rgba(255,255,255,0.45)"
-              strokeWidth="0.55"
-              strokeLinejoin="round"
-            />
-            <circle cx="4.5" cy="4.5" r="0.5" fill="rgba(255,255,255,0.25)" />
-          </pattern>
-
-          {/* Crowd silhouette: tightly packed dots up top. We render this
-           *  as a stippled mask so the band reads as "people" instead of a
-           *  flat color block. */}
-          <pattern id="crowdDots" x="0" y="0" width="4" height="3" patternUnits="userSpaceOnUse">
-            <circle cx="1" cy="1.5" r="0.65" fill="rgba(0,0,0,0.42)" />
-            <circle cx="3" cy="1.5" r="0.55" fill="rgba(0,0,0,0.32)" />
-          </pattern>
-
-          {/* Stadium-light bloom directly above the goal. Two soft suns
-           *  flare from the rim of the lower-bowl. */}
-          <radialGradient id="floodlight" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="rgba(255, 248, 220, 0.55)" />
-            <stop offset="60%" stopColor="rgba(255, 248, 220, 0.1)" />
-            <stop offset="100%" stopColor="rgba(255, 248, 220, 0)" />
-          </radialGradient>
-
-          {/* Soft drop shadow for the ball and goal posts. */}
+          {/* Soft drop shadow for the goal posts + crossbar. */}
           <filter id="softShadow" x="-50%" y="-50%" width="200%" height="200%">
             <feGaussianBlur stdDeviation="0.9" />
           </filter>
         </defs>
 
-        {/* === STADIUM BACKDROP ============================================ */}
-        {/* Lower stand strip — slightly darker than sky, with a crowd
-         *  stipple over the top half so the band reads as occupants. */}
-        <rect x="0" y="0" width={VIEW_W} height="40" fill="rgba(20, 28, 56, 0.55)" />
-        <rect x="0" y="6" width={VIEW_W} height="22" fill="url(#crowdDots)" />
-        {/* Two floodlight bloom suns flank the stadium roof. */}
-        <ellipse cx="90" cy="22" rx="80" ry="28" fill="url(#floodlight)" />
-        <ellipse cx="310" cy="22" rx="80" ry="28" fill="url(#floodlight)" />
-        {/* Horizon line where the stand meets the grass. */}
-        <rect x="0" y="38" width={VIEW_W} height="3" fill="rgba(0,0,0,0.18)" />
-
-        {/* === PITCH MARKINGS ============================================== */}
-        {/* Diagonal stripes overlaid on the grass for that mowed feel. */}
-        <rect x="0" y="38" width={VIEW_W} height={VIEW_H - 38} fill="url(#grassStripes)" />
-        {/* Six-yard box (small inner rectangle around the goal). */}
-        <rect
-          x={PITCH.goalLeft - 28}
-          y={PITCH.goalBottom}
-          width={GOAL_WIDTH + 56}
-          height="32"
-          fill="none"
-          stroke="rgba(255,255,255,0.65)"
-          strokeWidth="1.6"
-        />
-        {/* Penalty box (larger rectangle). */}
-        <rect
-          x={PITCH.goalLeft - 80}
-          y={PITCH.goalBottom}
-          width={GOAL_WIDTH + 160}
-          height="78"
-          fill="none"
-          stroke="rgba(255,255,255,0.55)"
-          strokeWidth="1.4"
-        />
-        {/* Penalty arc — the "D" at the front of the box. */}
+        {/* Penalty arc — a single soft curve above the ball to anchor the
+         *  penalty spot without crowding the canvas. */}
         <path
-          d={`M ${PITCH.ballX - 28} ${PITCH.ballY - 5} Q ${PITCH.ballX} ${PITCH.ballY - 22} ${PITCH.ballX + 28} ${PITCH.ballY - 5}`}
+          d={`M ${PITCH.ballX - 60} ${PITCH.ballY - 12} Q ${PITCH.ballX} ${
+            PITCH.ballY - 28
+          } ${PITCH.ballX + 60} ${PITCH.ballY - 12}`}
           fill="none"
-          stroke="rgba(255,255,255,0.55)"
-          strokeWidth="1.4"
+          stroke="var(--sp-surface)"
+          strokeWidth="1"
+          opacity="0.5"
         />
-        {/* Penalty spot — small painted disc the ball sits on. */}
-        <circle cx={PITCH.ballX} cy={PITCH.ballY + 4} r="2.2" fill="rgba(255,255,255,0.85)" />
 
         {/* === GOAL FRAME ================================================== */}
         {/* Three planes per upright + crossbar:
@@ -261,15 +188,6 @@ export function Pitch({
           height="3"
           fill="rgba(0,0,0,0.18)"
           filter="url(#softShadow)"
-        />
-
-        {/* Net fill (paint inside the goal mouth before the keeper / heat). */}
-        <rect
-          x={PITCH.goalLeft + 1}
-          y={PITCH.goalTop + 1}
-          width={GOAL_WIDTH - 2}
-          height={PITCH.goalBottom - PITCH.goalTop - 2}
-          fill="url(#goalNet)"
         />
 
         {/* Payout heat zones paint the goal interior with the heat ramp so
@@ -292,6 +210,37 @@ export function Pitch({
             dim={belief != null && belief.points.length > 1}
           />
         ) : null}
+
+        {/* Net hint — a simple grid of 10 vertical + 4 horizontal strands
+         *  drawn over the heat zones / keeper so the goal mouth reads as
+         *  netted, without the fussiness of a true diamond mesh. */}
+        <g stroke="var(--sp-surface)" strokeWidth="0.6" opacity="0.55">
+          {Array.from({ length: 10 }, (_, i) => {
+            const x = PITCH.goalLeft + (GOAL_WIDTH / 10) * (i + 1);
+            return (
+              <line
+                key={`nv${i}`}
+                x1={x}
+                y1={PITCH.goalTop + 2}
+                x2={x}
+                y2={PITCH.goalBottom - 1}
+              />
+            );
+          })}
+          {Array.from({ length: 4 }, (_, i) => {
+            const y =
+              PITCH.goalTop + ((PITCH.goalBottom - PITCH.goalTop) / 5) * (i + 1);
+            return (
+              <line
+                key={`nh${i}`}
+                x1={PITCH.goalLeft + 1}
+                y1={y}
+                x2={PITCH.goalRight - 1}
+                y2={y}
+              />
+            );
+          })}
+        </g>
 
         {/* === GOAL FRAME (continued) — drawn over the net + heat so the
          *   posts look like they wrap in front of the mesh. */}
@@ -326,12 +275,9 @@ export function Pitch({
           textAnchor="middle"
           fontFamily="var(--sp-font-mono)"
           fontSize="11"
-          fontWeight="700"
-          fill="#FFFFFF"
-          opacity="0.95"
-          style={{ paintOrder: 'stroke' }}
-          stroke="rgba(0,0,0,0.35)"
-          strokeWidth="2"
+          fontWeight="600"
+          fill="var(--sp-text)"
+          opacity="0.55"
         >
           {fmt(lowerBound)}
         </text>
@@ -341,12 +287,9 @@ export function Pitch({
           textAnchor="middle"
           fontFamily="var(--sp-font-mono)"
           fontSize="11"
-          fontWeight="700"
-          fill="#FFFFFF"
-          opacity="0.95"
-          style={{ paintOrder: 'stroke' }}
-          stroke="rgba(0,0,0,0.35)"
-          strokeWidth="2"
+          fontWeight="600"
+          fill="var(--sp-text)"
+          opacity="0.55"
         >
           {fmt(upperBound)}
         </text>
@@ -363,14 +306,11 @@ export function Pitch({
             fontSize="9"
             fontWeight="700"
             letterSpacing="0.06em"
-            style={{ paintOrder: 'stroke' }}
-            stroke="rgba(0,0,0,0.4)"
-            strokeWidth="2.2"
           >
-            <tspan fill="#FF8B7A">RED</tspan>
-            <tspan fill="#FFFFFF" fontWeight="600">{' = WHERE THE CROWD IS · '}</tspan>
-            <tspan fill="#86F0B0">GREEN</tspan>
-            <tspan fill="#FFFFFF" fontWeight="600">{' = BIGGER PAYOUT'}</tspan>
+            <tspan fill="#EF4444">RED</tspan>
+            <tspan fill="var(--sp-text-secondary)" fontWeight="500">{' = WHERE THE CROWD IS · '}</tspan>
+            <tspan fill="#22C55E">GREEN</tspan>
+            <tspan fill="var(--sp-text-secondary)" fontWeight="500">{' = BIGGER PAYOUT'}</tspan>
           </text>
         ) : null}
 
@@ -401,7 +341,7 @@ export function Pitch({
           </g>
         )}
 
-        {/* Curved shot-meter (NBA 2K style) on the right edge — top is perfect */}
+        {/* Tapered shot-meter on the right edge — wide at top (perfect), narrow at bottom */}
         {timing && (
           <TimingArc
             phaseRef={timing.phaseRef}
@@ -478,7 +418,7 @@ function AimDotLive({ phaseRef }: { phaseRef: MutableRefObject<number> }) {
  * Cinematic ball flight. Replaces framer-motion's spring on the ball group
  * with a per-frame parametric path computation that lets us:
  *
- *   - vary the curve shape per shot type (strike = laser; curl = bend; chip
+ *   - vary the curve shape per shot type (direct = laser; curl = bend; chip
  *     = high arc; sweep = floaty roll)
  *   - vary the duration & easing per shot type
  *   - drive the ball's rotation, the shadow scale, and the trail in lockstep
@@ -511,11 +451,11 @@ interface ShotProfile {
   trail: 'tight' | 'curl' | 'lofted' | 'sweep';
 }
 
-// Tuned per-shot personality. Strike is short + flat + fast; chip is the
+// Tuned per-shot personality. Direct is short + flat + fast; chip is the
 // hang-time shot; curl bends hard and lands a touch later; sweep floats wide
 // and lazy. Durations are intentionally long (1.1-1.7s) for the cinematic feel.
 const SHOT_PROFILES: Record<ShotType, ShotProfile> = {
-  strike: {
+  direct: {
     durationMs: 1150,
     // Strong ease-out: ball leaves the boot quickly and decelerates into net.
     ease: (t) => 1 - Math.pow(1 - t, 2.2),
@@ -779,23 +719,20 @@ function pathAt(
   };
 }
 
-/**
- * Curved vertical shot-meter, inspired by the NBA 2K release meter. A
- * quadratic bezier curves up the right edge of the pitch; the indicator
- * slides along the curve as the phase oscillates 0..1, and the green
- * sweet zone sits at the very top so the perfect release is the apex.
- */
-const ARC = {
-  p0: { x: 206, y: 202 },
-  p1: { x: 188, y: 175 },
-  p2: { x: 210, y: 148 },
+/** Straight tapered shot-meter: narrow at the bottom, wide at the top. */
+const METER = {
+  cx: PITCH.ballX,
+  topY: 148,
+  botY: 202,
+  topHW: 10,
+  botHW: 3,
 } as const;
 
-function arcPointAt(t: number) {
-  const u = 1 - t;
+function meterAt(t: number) {
+  const c = Math.max(0, Math.min(1, t));
   return {
-    x: u * u * ARC.p0.x + 2 * u * t * ARC.p1.x + t * t * ARC.p2.x,
-    y: u * u * ARC.p0.y + 2 * u * t * ARC.p1.y + t * t * ARC.p2.y,
+    y: METER.botY + c * (METER.topY - METER.botY),
+    hw: METER.botHW + c * (METER.topHW - METER.botHW),
   };
 }
 
@@ -808,16 +745,26 @@ function TimingArc({
   sweetSpotHalfWidth: number;
   locked?: boolean;
 }) {
-  const indicatorRef = useRef<SVGGElement>(null);
+  const indicatorGRef = useRef<SVGGElement>(null);
+  const indicatorFillRef = useRef<SVGRectElement>(null);
+  const indicatorGlowRef = useRef<SVGRectElement>(null);
 
   useEffect(() => {
     if (locked) return;
     let raf = 0;
     const tick = () => {
-      const g = indicatorRef.current;
-      if (g) {
-        const p = arcPointAt(Math.max(0, Math.min(1, phaseRef.current)));
-        g.setAttribute('transform', `translate(${p.x.toFixed(2)}, ${p.y.toFixed(2)})`);
+      const g = indicatorGRef.current;
+      const fill = indicatorFillRef.current;
+      const glow = indicatorGlowRef.current;
+      if (g && fill) {
+        const { y, hw } = meterAt(phaseRef.current);
+        g.setAttribute('transform', `translate(${METER.cx}, ${y.toFixed(2)})`);
+        fill.setAttribute('x', (-hw).toFixed(2));
+        fill.setAttribute('width', (hw * 2).toFixed(2));
+        if (glow) {
+          glow.setAttribute('x', (-hw - 1.5).toFixed(2));
+          glow.setAttribute('width', (hw * 2 + 3).toFixed(2));
+        }
       }
       raf = requestAnimationFrame(tick);
     };
@@ -825,37 +772,49 @@ function TimingArc({
     return () => cancelAnimationFrame(raf);
   }, [phaseRef, locked]);
 
-  const trackD = `M ${ARC.p0.x} ${ARC.p0.y} Q ${ARC.p1.x} ${ARC.p1.y} ${ARC.p2.x} ${ARC.p2.y}`;
-
   const tSplit = Math.max(0, 1 - sweetSpotHalfWidth * 2);
-  const splitStart = arcPointAt(tSplit);
-  const splitCtrl = {
-    x: (1 - tSplit) * ARC.p1.x + tSplit * ARC.p2.x,
-    y: (1 - tSplit) * ARC.p1.y + tSplit * ARC.p2.y,
-  };
-  const sweetD = `M ${splitStart.x.toFixed(2)} ${splitStart.y.toFixed(2)} Q ${splitCtrl.x.toFixed(2)} ${splitCtrl.y.toFixed(2)} ${ARC.p2.x} ${ARC.p2.y}`;
+  const split = meterAt(tSplit);
+  const initial = meterAt(phaseRef.current);
 
-  const initial = arcPointAt(Math.max(0, Math.min(1, phaseRef.current)));
+  const trackPath = `M ${METER.cx - METER.topHW} ${METER.topY} L ${METER.cx + METER.topHW} ${METER.topY} L ${METER.cx + METER.botHW} ${METER.botY} L ${METER.cx - METER.botHW} ${METER.botY} Z`;
+  const sweetPath = `M ${METER.cx - METER.topHW} ${METER.topY} L ${METER.cx + METER.topHW} ${METER.topY} L ${(METER.cx + split.hw).toFixed(2)} ${split.y.toFixed(2)} L ${(METER.cx - split.hw).toFixed(2)} ${split.y.toFixed(2)} Z`;
 
   return (
     <g style={{ pointerEvents: 'none' }}>
-      <path d={trackD} stroke="rgba(0, 0, 0, 0.3)" strokeWidth="7" strokeLinecap="round" fill="none" transform="translate(0.6, 1.4)" />
-      <path d={trackD} stroke="#FFFFFF" strokeWidth="6" strokeLinecap="round" fill="none" opacity="0.7" />
-      <path d={trackD} stroke="var(--sp-text)" strokeWidth="3" strokeLinecap="round" fill="none" opacity="0.14" />
-      <path d={sweetD} stroke="#22C55E" strokeWidth="12" strokeLinecap="round" fill="none" opacity="0.3" />
-      <path d={sweetD} stroke="#22C55E" strokeWidth="7" strokeLinecap="round" fill="none" opacity="0.95" />
-      <circle cx={ARC.p2.x} cy={ARC.p2.y} r="1.8" fill="#FFFFFF" opacity="0.9" />
+      {/* Shadow */}
+      <path d={trackPath} fill="rgba(0,0,0,0.28)" transform="translate(0.8, 1.8)" />
+      {/* Track */}
+      <path d={trackPath} fill="#FFFFFF" opacity="0.65" />
+      <path d={trackPath} fill="var(--sp-text)" opacity="0.1" />
+      {/* Sweet zone */}
+      <path d={sweetPath} fill="#22C55E" opacity="0.3" />
+      <path d={sweetPath} fill="#22C55E" opacity="0.9" />
+      {/* Top cap */}
+      <rect x={METER.cx - METER.topHW} y={METER.topY - 1.5} width={METER.topHW * 2} height="3" rx="1.5" fill="#FFFFFF" opacity="0.9" />
 
-      <g ref={indicatorRef} transform={`translate(${initial.x.toFixed(2)}, ${initial.y.toFixed(2)})`}>
-        <circle cx="0" cy="0" r="5.5" fill="var(--sp-text)" opacity="0.22" />
-        <circle
-          cx="0"
-          cy="0"
-          r="3.4"
+      {/* Indicator */}
+      <g ref={indicatorGRef} transform={`translate(${METER.cx}, ${initial.y.toFixed(2)})`}>
+        <rect
+          ref={indicatorGlowRef}
+          x={(-initial.hw - 1.5).toFixed(2)}
+          y="-4"
+          width={(initial.hw * 2 + 3).toFixed(2)}
+          height="8"
+          rx="2"
+          fill="rgba(0,0,0,0.22)"
+          transform="translate(0.5, 1.2)"
+        />
+        <rect
+          ref={indicatorFillRef}
+          x={(-initial.hw).toFixed(2)}
+          y="-3"
+          width={(initial.hw * 2).toFixed(2)}
+          height="6"
+          rx="1.5"
           fill={locked ? 'var(--sp-accent)' : 'var(--sp-text)'}
           style={{ transition: 'fill 0.18s var(--sp-ease)' }}
         />
-        <circle cx="0" cy="0" r="1.4" fill="#FFFFFF" />
+        <rect x="-4" y="-1.5" width="8" height="3" rx="1" fill="#FFFFFF" opacity="0.55" />
       </g>
     </g>
   );

@@ -77,6 +77,107 @@
   }
 }
 
+/* Bet summary slot. Lives inside the (position: relative) game canvas
+ * wrapper. On narrow screens it sits inline under the pitch. On wide
+ * screens it floats absolutely to the right of the canvas so it can
+ * appear after the first kick without shifting any surrounding layout
+ * (the phase hint, footer, and column height all stay put). The
+ * breakpoint matches the smallest viewport where a 200px sidebar still
+ * fits beside the centered 520px column with comfortable margins. */
+.sp-bet-summary-slot {
+  margin-top: 12px;
+}
+.sp-bet-summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+  align-items: flex-start;
+}
+.sp-bet-summary-guest {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+@media (min-width: 960px) {
+  .sp-bet-summary-slot {
+    position: absolute;
+    top: 0;
+    left: calc(100% + 20px);
+    width: 200px;
+    margin-top: 0;
+  }
+  /* Stack the three figures vertically; the sidebar is too narrow for
+   * a 3-column row to read cleanly (labels like "Best case" would
+   * wrap and the numbers would feel cramped). */
+  .sp-bet-summary-slot .sp-bet-summary-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  /* Right/center alignment looks broken in a vertical stack; pull
+   * each cell left so labels and values share a clean column edge. */
+  .sp-bet-summary-slot .sp-bet-summary-grid > * {
+    text-align: left !important;
+  }
+  /* Guest CTA stacks too -- the "Sign in" link is too long to share
+   * a 200px row with the stake figure. */
+  .sp-bet-summary-slot .sp-bet-summary-guest {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+}
+
+/* Page shell main column. On mobile the column grows to fill the viewport
+ * so the sticky footer sits at the bottom edge even when content is short.
+ * Desktop drops the grow so content (and the inline footer below it) sit
+ * at their natural height. */
+.sp-pageshell-main {
+  padding: 20px 16px 32px;
+  flex: 1;
+}
+.sp-pageshell-main--with-footer {
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
+}
+
+/* Page shell footer band. Sticky and glassy on mobile so the primary CTA is
+ * always reachable; on desktop it un-sticks and sits inline below the
+ * content, dropping the glass + top border since it's no longer floating. */
+.sp-pageshell-footer {
+  position: sticky;
+  bottom: 0;
+  width: 100%;
+  background: var(--sp-glass-footer);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid var(--sp-border-subtle);
+}
+.sp-pageshell-footer-inner {
+  max-width: var(--sp-max-width);
+  margin: 0 auto;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 720px) {
+  .sp-pageshell-main {
+    flex: 0 0 auto;
+  }
+  .sp-pageshell-main--with-footer {
+    padding-bottom: 32px;
+  }
+  .sp-pageshell-footer {
+    position: static;
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-top: none;
+  }
+  .sp-pageshell-footer-inner {
+    padding: 0 16px 32px;
+  }
+}
+
 * {
   box-sizing: border-box;
 }
@@ -187,8 +288,11 @@ select {
 .sp-stake-field input:focus-visible {
   outline: none;
 }
-.sp-stake-clear:hover {
-  opacity: 0.85 !important;
+@media (hover: hover) and (pointer: fine) {
+  .sp-stake-clear:hover {
+    opacity: 0.95 !important;
+    background: var(--sp-text) !important;
+  }
 }
 .sp-stake-clear:active {
   opacity: 1 !important;
@@ -255,6 +359,118 @@ select {
 .sp-stake-slider:active::-moz-range-thumb {
   transform: scale(1.12);
   cursor: grabbing;
+}
+
+/* Generic interactive affordance. Provides the transition + a centered
+ * scale-down on press (no positional translation — by design). Hover
+ * effects below are gated to `(hover: hover) and (pointer: fine)` so
+ * touch taps don't false-trigger them. Pick the modifier that matches
+ * the button's role:
+ *   - sp-tap-surface: standalone raised pill/round button (back, "Change", quick-pick)
+ *   - sp-tap-chip: inactive tab/scope-toggle (recesses when hovered)
+ *   - sp-tap-link: text-only button (opacity fade only)
+ * `.sp-tap` alone still gives you the press feedback and transition. */
+.sp-tap {
+  transition:
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    box-shadow 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    opacity 160ms ease,
+    filter 160ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sp-tap:not(:disabled):active {
+  transform: scale(0.97);
+}
+
+/* Skeumorphic surface: at rest, the button reads as a slightly raised
+ * enamelled pebble. Top inset highlight makes the face catch the light;
+ * a soft, symmetric drop sits the button above the page without a hard
+ * bottom line. Inline `background` and `border` on the button still
+ * control color — the class only contributes shadows. */
+.sp-tap-surface {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    0 1px 2px rgba(0, 0, 0, 0.05),
+    0 3px 6px rgba(0, 0, 0, 0.04);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  /* Surface hover: deepen the highlight + drop shadow + darken the border.
+   * No transform — the button stays put. The effect reads as "a light just
+   * hit it" rather than "it moved toward me". */
+  .sp-tap-surface:not(:disabled):hover {
+    border-color: var(--sp-text-muted);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.95),
+      0 1px 2px rgba(0, 0, 0, 0.08),
+      0 5px 12px rgba(0, 0, 0, 0.06);
+  }
+
+  /* Chip hover: tint plus a faint inset shadow so the chip reads as
+   * "recessed under the finger". Distinct from surface (raised) so the
+   * two interaction modes are legible at a glance. */
+  .sp-tap-chip:not(:disabled):hover {
+    background: rgba(15, 15, 16, 0.05);
+    color: var(--sp-text);
+    box-shadow: inset 0 1px 1.5px rgba(0, 0, 0, 0.05);
+  }
+
+  /* Link / text button: opacity only. No shadow play — they're flat by intent. */
+  .sp-tap-link:not(:disabled):hover {
+    opacity: 0.72;
+  }
+}
+
+/* Surface press: flip to an inset depression. The shadow change reads as
+ * the button getting pushed in; the scale (from .sp-tap) adds the squish. */
+.sp-tap-surface:not(:disabled):active {
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.14),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.06),
+    0 0 0 rgba(0, 0, 0, 0);
+}
+
+.sp-tap-chip:not(:disabled):active {
+  background: rgba(15, 15, 16, 0.08);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+/* Skeumorphic primary surface — for small dark "Try again" / inline CTAs
+ * that don't need the full Pill API. Mirrors Pill's primary variant at a
+ * smaller scale: enamelled-pebble shadow stack, brighter on hover,
+ * inset on press. Set the gradient background inline at the call-site
+ * (matches Pill's gradient) — this class only contributes the shadow
+ * choreography and text shadow. */
+.sp-tap-primary {
+  color: var(--sp-on-primary);
+  text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.4);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.7),
+    0 1px 2px rgba(0, 0, 0, 0.18),
+    0 4px 10px rgba(0, 0, 0, 0.16);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .sp-tap-primary:not(:disabled):hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.28),
+      inset 0 0 0 1px rgba(0, 0, 0, 0.7),
+      0 2px 5px rgba(0, 0, 0, 0.22),
+      0 8px 18px rgba(0, 0, 0, 0.2);
+    filter: brightness(1.1);
+  }
+}
+
+.sp-tap-primary:not(:disabled):active {
+  filter: brightness(0.92);
+  box-shadow:
+    inset 0 2px 3px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.7);
 }
 
 /* Skeleton shimmer for loading placeholders */

@@ -24,27 +24,34 @@ import type { MarketState, Region } from '@functionspace/core';
 export type KickState = 'ready' | 'aiming' | 'timing' | 'flying' | 'landed';
 
 /**
- * Shot type chosen before the kick. Default 'strike' preserves the
+ * Shot type chosen before the kick. Default 'direct' preserves the
  * original single-point behavior; the others reshape the committed
  * Region without changing the aim/time mechanic.
  *
- *  - strike: narrow PointRegion (default)
+ *  - direct: narrow PointRegion (default)
  *  - curl:   PointRegion with skew; sign derived from which half of the
  *            goal the user aimed at (left half = negative skew)
  *  - chip:   PointRegion with wider spread
  *  - sweep:  RangeRegion (band) centered on the aim
  */
-export type ShotType = 'strike' | 'curl' | 'chip' | 'sweep';
+export type ShotType = 'direct' | 'curl' | 'chip' | 'sweep';
 
 const AIM_PERIOD_MS = 1100;
 // Faster oscillation than aim so the meter genuinely punishes a slow tap.
-const TIMING_PERIOD_MS = 750;
+const TIMING_PERIOD_MS = 700;
 // Sweet spot anchored to the top of the oscillation (phase = 1.0) so the
 // indicator must reach the apex of the timing arc, NBA 2K shot-meter style.
 const SWEET_SPOT_CENTER = 1.0;
 // Narrower than before -- previous 0.10 was too forgiving and most kicks
 // hit perfect. 0.06 still feels reachable but rewards deliberate timing.
 const SWEET_SPOT_HALF_WIDTH = 0.06;
+// Non-linear timing curve. The raw triangle wave (0..1..0) is exponentiated
+// so the indicator crawls at the bottom and accelerates as it climbs toward
+// the perfect zone at the apex. A sin oscillator would slow at the top (the
+// hardest place to read) -- this inverts that, punishing a slow tap.
+// Tuned by feel: 1.8 makes the sweet window roughly a third of the linear
+// dwell time, harder but still reachable with a deliberate tap.
+const TIMING_CURVE_EXPONENT = 1.8;
 
 // Spread tunables (no wind). Missing the sweet spot now meaningfully widens
 // the kick: a fully whiffed kick can spray across ~30% of the range.
@@ -58,10 +65,18 @@ const SWEET_INTERIOR_DROP = 0.1;     // perfect = 1.0, edge of sweet zone = 0.9
 const OUTSIDE_BASE = 0.6;             // power just outside sweet zone
 const OUTSIDE_FALLOFF = 2.4;          // steeper than before (was 1.6)
 
+// Directional miss. Missing the timing now also shifts the landing
+// horizontally away from the locked aim: tapping early (indicator still
+// rising) pulls one way, tapping late (falling) the other. Scaled so a
+// hard miss can shift the ball by roughly half the goal width.
+const TIMING_MISS_DIR_SCALE = 0.55;
+// Non-linear so small misses barely deflect but big misses really pull.
+const TIMING_MISS_DIR_EXP = 1.3;
+
 // Shot-type spread multipliers. Applied on top of the timing-derived
 // spread so timing still matters within each shot type.
 const SHOT_SPREAD_MULT: Record<ShotType, number> = {
-  strike: 1,
+  direct: 1,
   curl: 1,
   chip: 2.2,
   sweep: 1,
@@ -92,7 +107,7 @@ function clamp01(n: number) {
 
 export function useKickEngine(
   market: MarketState | null,
-  shotType: ShotType = 'strike',
+  shotType: ShotType = 'direct',
 ): KickEngine {
   const [state, setState] = useState<KickState>('ready');
   const [aimX, setAimX] = useState<number | null>(null);
@@ -101,6 +116,10 @@ export function useKickEngine(
 
   const aimPhaseRef = useRef(0);
   const timingPhaseRef = useRef(0);
+  // True while the timing indicator is climbing toward the apex, false
+  // while descending. Used to give an early vs late miss a consistent
+  // directional sign on the landing offset.
+  const timingRisingRef = useRef(true);
   // Capture the shot type at the moment of kick so changing the selector
   // mid-kick can't desync the committed region.
   const shotTypeRef = useRef<ShotType>(shotType);
@@ -125,8 +144,15 @@ export function useKickEngine(
     let raf = 0;
     const start = performance.now();
     const tick = (now: number) => {
-      const t = (now - start) / TIMING_PERIOD_MS;
-      timingPhaseRef.current = (Math.sin(t * Math.PI * 2 - Math.PI / 2) + 1) / 2;
+      // Triangle wave 0..1..0 driven by elapsed period -- linear in time so
+      // the velocity along the *input* is constant.
+      const t = ((now - start) / TIMING_PERIOD_MS) % 1;
+      const tri = t < 0.5 ? t * 2 : 2 - t * 2;
+      timingRisingRef.current = t < 0.5;
+      // Exponentiating the triangle wave reshapes the velocity profile: slow
+      // crawl through the bottom half, accelerating into the apex. The
+      // perfect zone (phase >= 1 - sweetHalfWidth) gets the shortest dwell.
+      timingPhaseRef.current = Math.pow(tri, TIMING_CURVE_EXPONENT);
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -139,6 +165,7 @@ export function useKickEngine(
     setLandingX(null);
     aimPhaseRef.current = 0;
     timingPhaseRef.current = 0;
+    timingRisingRef.current = true;
     shotTypeRef.current = shotType;
     setState('aiming');
   }, [shotType]);
@@ -158,8 +185,14 @@ export function useKickEngine(
       : Math.max(0, OUTSIDE_BASE - (dist - SWEET_SPOT_HALF_WIDTH) * OUTSIDE_FALLOFF);
     setPower(p);
 
-    // Landing equals the locked aim -- no jitter now that wind is gone.
-    const ax = aimX ?? 0.5;
+    // Miss outside the sweet zone deflects the ball horizontally. Direction
+    // comes from rising vs falling (early vs late tap) so the player feels a
+    // consistent cause-and-effect rather than random spray.
+    const missOutside = Math.max(0, dist - SWEET_SPOT_HALF_WIDTH);
+    const dirSign = timingRisingRef.current ? -1 : 1;
+    const dirOffset = dirSign * TIMING_MISS_DIR_SCALE * Math.pow(missOutside, TIMING_MISS_DIR_EXP);
+
+    const ax = (aimX ?? 0.5) + dirOffset;
     setLandingX(clamp01(ax));
     setState('flying');
   }, [aimX]);

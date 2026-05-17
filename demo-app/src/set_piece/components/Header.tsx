@@ -31,6 +31,7 @@ export function Header({ onBack, centerLabel, showWallet = true }: HeaderProps) 
           <button
             aria-label="Back"
             onClick={onBack}
+            className="sp-tap sp-tap-surface"
             style={{
               width: '32px',
               height: '32px',
@@ -84,6 +85,7 @@ export function Header({ onBack, centerLabel, showWallet = true }: HeaderProps) 
         {isAuthenticated && user && showWallet ? (
           <button
             onClick={() => setAuthOpen(true)}
+            className="sp-tap sp-tap-surface"
             style={{
               display: 'inline-flex',
               alignItems: 'center',

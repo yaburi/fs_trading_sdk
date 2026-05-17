@@ -21,7 +21,7 @@ export default function Game() {
   const { market } = useMarket(marketId ?? '');
   const { consensus } = useConsensus(marketId ?? '', 80);
   const round = useRound();
-  const [shotType, setShotType] = useState<ShotType>('strike');
+  const [shotType, setShotType] = useState<ShotType>('direct');
   const engine = useKickEngine(market, shotType);
   const composed = useComposedBelief(market, round.kicks, 80);
   const kicksRemaining = ROUND_CONSTANTS.MAX_KICKS - round.kicks.length;
@@ -47,7 +47,7 @@ export default function Game() {
     try {
       await buy.execute(composed.vector, round.stake);
       setCelebrating(true);
-      refreshUser().catch(() => {});
+      refreshUser().catch(() => { });
       // Hold the celebration for ~1.5s so the spring + GOOOAL! lands, then
       // navigate to the /calls list which acts as the receipt.
       setTimeout(() => {
@@ -141,10 +141,10 @@ export default function Game() {
     () =>
       showTiming
         ? {
-            phaseRef: engine.timingPhaseRef,
-            sweetSpotHalfWidth: engine.sweetSpot.halfWidth,
-            locked: engine.state === 'flying',
-          }
+          phaseRef: engine.timingPhaseRef,
+          sweetSpotHalfWidth: engine.sweetSpot.halfWidth,
+          locked: engine.state === 'flying',
+        }
         : null,
     [showTiming, engine.timingPhaseRef, engine.sweetSpot.halfWidth, engine.state],
   );
@@ -272,7 +272,7 @@ export default function Game() {
               {buy.error.message}
             </div>
           )}
-          {/* Shot-type chooser. Default 'strike' matches the original kick;
+          {/* Shot-type chooser. Default 'direct' matches the original kick;
            *  the others reshape the committed region without changing the
            *  aim/time flow. Disabled while a kick is in flight. */}
           <ShotTypeChips
@@ -280,6 +280,20 @@ export default function Game() {
             onChange={setShotType}
             disabled={engine.state !== 'ready'}
           />
+
+          <Pill
+            variant="primary"
+            size="lg"
+            fullWidth
+            disabled={primaryDisabled}
+            onClick={engine.primaryAction}
+          >
+            {kicksRemaining === 0
+              ? 'Out of kicks'
+              : engine.state === 'ready'
+                ? 'Kick'
+                : engine.primaryLabel}
+          </Pill>
 
           <div style={{ display: 'flex', gap: '8px' }}>
             <Pill
@@ -302,19 +316,7 @@ export default function Game() {
             </Pill>
           </div>
 
-          <Pill
-            variant="primary"
-            size="lg"
-            fullWidth
-            disabled={primaryDisabled}
-            onClick={engine.primaryAction}
-          >
-            {kicksRemaining === 0
-              ? 'Out of kicks'
-              : engine.state === 'ready'
-                ? 'Kick'
-                : engine.primaryLabel}
-          </Pill>
+
         </div>
       }
     >
@@ -378,6 +380,7 @@ export default function Game() {
           <button
             onClick={() => setPickerOpen(true)}
             aria-label="Change market"
+            className="sp-tap sp-tap-surface"
             style={{
               flexShrink: 0,
               padding: '6px 10px',
@@ -388,6 +391,7 @@ export default function Game() {
               fontSize: '11px',
               fontWeight: 600,
               fontFamily: 'var(--sp-font-body)',
+              cursor: 'pointer',
             }}
           >
             Change
@@ -395,39 +399,150 @@ export default function Game() {
         </div>
       </Card>
 
-      {/* Game canvas with kicks-remaining badge overlay */}
+      {/* Game canvas with kicks-remaining badge overlay. The bet summary
+       *  slot also lives in this wrapper so it can absolutely position
+       *  itself as a floating sidebar on wide screens, anchored to the
+       *  canvas's right edge. On narrow screens the slot falls back to
+       *  inline flow under the pitch. Either way the surrounding column
+       *  never reflows when the summary appears after the first kick. */}
       <div style={{ position: 'relative' }}>
-        <Card padding="none" tone="inset" radius="md" style={{ overflow: 'hidden' }}>
-          {market ? (
-            <Pitch
-              market={market}
-              consensus={consensus}
-              aim={aim}
-              kicks={round.kicks}
-              belief={composed?.curve ?? null}
-              ballTarget={ballTarget}
-              onBallSettled={engine.onLanded}
-              timing={timing}
-              shotType={shotType}
-            />
-          ) : (
-            <div
-              style={{
-                width: '100%',
-                aspectRatio: '4 / 3',
-                background: 'var(--sp-surface-2)',
-              }}
+        {/* Inner relative wrapper around just the pitch + badge. The
+         *  badge anchors to bottom of THIS box, so it stays glued to
+         *  the pitch even when the outer wrapper grows on mobile to
+         *  contain the inline bet summary below. */}
+        <div style={{ position: 'relative' }}>
+          <Card padding="none" tone="inset" radius="md" style={{ overflow: 'hidden' }}>
+            {market ? (
+              <Pitch
+                market={market}
+                consensus={consensus}
+                aim={aim}
+                kicks={round.kicks}
+                belief={composed?.curve ?? null}
+                ballTarget={ballTarget}
+                onBallSettled={engine.onLanded}
+                timing={timing}
+                shotType={shotType}
+              />
+            ) : (
+              <div
+                style={{
+                  width: '100%',
+                  aspectRatio: '4 / 3',
+                  background: 'var(--sp-surface-2)',
+                }}
+              />
+            )}
+          </Card>
+          {/* Kicks-remaining badge sits below the ball, anchored to the
+           *  bottom of the canvas. Hidden until the market loads so it
+           *  doesn't flash over the skeleton. */}
+          {market && (
+            <KicksRemainingBadge
+              taken={round.kicks.length}
+              total={ROUND_CONSTANTS.MAX_KICKS}
             />
           )}
-        </Card>
-        {/* Kicks-remaining badge sits below the ball, anchored to the
-         *  bottom of the canvas. Hidden until the market loads so it
-         *  doesn't flash over the skeleton. */}
-        {market && (
-          <KicksRemainingBadge
-            taken={round.kicks.length}
-            total={ROUND_CONSTANTS.MAX_KICKS}
-          />
+        </div>
+
+        {/* Bet summary, appears after first kick. Three figures across the card:
+         *   STAKE  ·  EXPECTED (probability-weighted under your belief)  ·  BEST CASE
+         * with a "if the crowd is right" anchor underneath. The user's belief
+         * shape is shown on the pitch above; we don't try to summarise it as a
+         * Gaussian (mean ± σ) here -- that lies for multimodal kicks. */}
+        {composed && market && (
+          <div className="sp-bet-summary-slot">
+            <Card padding="md" tone="inset">
+              {isAuthenticated ? (
+                <>
+                  <div className="sp-bet-summary-grid">
+                    <SummaryCell label="Stake">
+                      <span className="sp-mono" style={{ color: 'var(--sp-text)' }}>
+                        ${formatPayout(round.stake)}
+                      </span>
+                    </SummaryCell>
+
+                    <SummaryCell label="Expected" align="center">
+                      {payoutSummary ? (
+                        <span className="sp-mono" style={{ color: expectedColor }}>
+                          ${formatPayout(payoutSummary.expected)}
+                        </span>
+                      ) : (
+                        <span className="sp-secondary" style={{ fontSize: '14px' }}>
+                          {payoutLoading ? 'previewing…' : '–'}
+                        </span>
+                      )}
+                    </SummaryCell>
+
+                    <SummaryCell label="Best case" align="right">
+                      {payoutSummary ? (
+                        <span
+                          className="sp-mono"
+                          style={{ color: 'var(--sp-positive)' }}
+                        >
+                          ${formatPayout(payoutSummary.bestCase)}
+                        </span>
+                      ) : (
+                        <span className="sp-secondary" style={{ fontSize: '14px' }}>
+                          –
+                        </span>
+                      )}
+                    </SummaryCell>
+                  </div>
+
+                  {payoutSummary?.crowdAlignment != null && (
+                    <div
+                      className="sp-secondary"
+                      style={{
+                        marginTop: '10px',
+                        paddingTop: '10px',
+                        borderTop: '1px solid var(--sp-border-subtle)',
+                        fontSize: '11px',
+                        textAlign: 'center',
+                      }}
+                    >
+                      <span
+                        className="sp-mono"
+                        style={{ color: 'var(--sp-text)', fontWeight: 600 }}
+                      >
+                        {Math.round(payoutSummary.crowdAlignment * 100)}%
+                      </span>{' '}
+                      aligned with the crowd
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="sp-bet-summary-guest">
+                  <div>
+                    <div
+                      className="sp-uppercase sp-secondary"
+                      style={{ marginBottom: '2px' }}
+                    >
+                      Stake
+                    </div>
+                    <div className="sp-display-md" style={{ fontSize: '20px' }}>
+                      <span className="sp-mono">${formatPayout(round.stake)}</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setAuthOpen(true)}
+                    className="sp-tap sp-tap-link"
+                    style={{
+                      color: 'var(--sp-accent)',
+                      fontFamily: 'var(--sp-font-body)',
+                      fontSize: '14px',
+                      fontWeight: 600,
+                      padding: 0,
+                      lineHeight: 1.2,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Sign in to see payouts →
+                  </button>
+                </div>
+              )}
+            </Card>
+          </div>
         )}
       </div>
 
@@ -458,116 +573,6 @@ export default function Game() {
           }
         />
       </div>
-
-      {/* Bet summary, appears after first kick. Three figures across the card:
-       *   STAKE  ·  EXPECTED (probability-weighted under your belief)  ·  BEST CASE
-       * with a "if the crowd is right" anchor underneath. The user's belief
-       * shape is shown on the pitch above; we don't try to summarise it as a
-       * Gaussian (mean ± σ) here -- that lies for multimodal kicks. */}
-      {composed && market && (
-        <Card padding="md" tone="inset">
-          {isAuthenticated ? (
-            <>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr 1fr',
-                  gap: '10px',
-                  alignItems: 'flex-start',
-                }}
-              >
-                <SummaryCell label="Stake">
-                  <span className="sp-mono" style={{ color: 'var(--sp-text)' }}>
-                    ${formatPayout(round.stake)}
-                  </span>
-                </SummaryCell>
-
-                <SummaryCell label="Expected" align="center">
-                  {payoutSummary ? (
-                    <span className="sp-mono" style={{ color: expectedColor }}>
-                      ${formatPayout(payoutSummary.expected)}
-                    </span>
-                  ) : (
-                    <span className="sp-secondary" style={{ fontSize: '14px' }}>
-                      {payoutLoading ? 'previewing…' : '–'}
-                    </span>
-                  )}
-                </SummaryCell>
-
-                <SummaryCell label="Best case" align="right">
-                  {payoutSummary ? (
-                    <span
-                      className="sp-mono"
-                      style={{ color: 'var(--sp-positive)' }}
-                    >
-                      ${formatPayout(payoutSummary.bestCase)}
-                    </span>
-                  ) : (
-                    <span className="sp-secondary" style={{ fontSize: '14px' }}>
-                      –
-                    </span>
-                  )}
-                </SummaryCell>
-              </div>
-
-              {payoutSummary?.crowdAlignment != null && (
-                <div
-                  className="sp-secondary"
-                  style={{
-                    marginTop: '10px',
-                    paddingTop: '10px',
-                    borderTop: '1px solid var(--sp-border-subtle)',
-                    fontSize: '11px',
-                    textAlign: 'center',
-                  }}
-                >
-                  <span
-                    className="sp-mono"
-                    style={{ color: 'var(--sp-text)', fontWeight: 600 }}
-                  >
-                    {Math.round(payoutSummary.crowdAlignment * 100)}%
-                  </span>{' '}
-                  aligned with the crowd
-                </div>
-              )}
-            </>
-          ) : (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '12px',
-              }}
-            >
-              <div>
-                <div
-                  className="sp-uppercase sp-secondary"
-                  style={{ marginBottom: '2px' }}
-                >
-                  Stake
-                </div>
-                <div className="sp-display-md" style={{ fontSize: '20px' }}>
-                  <span className="sp-mono">${formatPayout(round.stake)}</span>
-                </div>
-              </div>
-              <button
-                onClick={() => setAuthOpen(true)}
-                style={{
-                  color: 'var(--sp-accent)',
-                  fontFamily: 'var(--sp-font-body)',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                  padding: 0,
-                  lineHeight: 1.2,
-                }}
-              >
-                Sign in to see payouts →
-              </button>
-            </div>
-          )}
-        </Card>
-      )}
 
       <AuthSheet
         open={authOpen}
@@ -656,8 +661,8 @@ interface ShotChipDef {
 
 const SHOT_CHIPS: ShotChipDef[] = [
   {
-    id: 'strike',
-    label: 'Strike',
+    id: 'direct',
+    label: 'Direct',
     description: 'Laser-flat. All your conviction on a single number.',
   },
   {
@@ -687,6 +692,7 @@ function ShotTypeChips({
   disabled?: boolean;
 }) {
   const active = SHOT_CHIPS.find((c) => c.id === value) ?? SHOT_CHIPS[0];
+  const [showDescription, setShowDescription] = useState(false);
   return (
     <div
       style={{
@@ -697,79 +703,124 @@ function ShotTypeChips({
         transition: 'opacity 0.18s var(--sp-ease)',
       }}
     >
-      <div
-        role="tablist"
-        aria-label="Shot type"
-        style={{
-          display: 'flex',
-          gap: '6px',
-          overflowX: 'auto',
-          paddingBottom: '2px',
-        }}
-      >
-        {SHOT_CHIPS.map((chip) => {
-          const isActive = chip.id === value;
-          return (
-            <button
-              key={chip.id}
-              role="tab"
-              aria-selected={isActive}
-              disabled={disabled}
-              onClick={() => onChange(chip.id)}
-              style={{
-                flex: '0 0 auto',
-                padding: '6px 12px',
-                borderRadius: '999px',
-                background: isActive ? 'var(--sp-primary)' : 'var(--sp-surface)',
-                color: isActive ? 'var(--sp-on-primary)' : 'var(--sp-text-secondary)',
-                border: isActive ? '1px solid transparent' : '1px solid var(--sp-border)',
-                fontSize: '12px',
-                fontWeight: 600,
-                cursor: disabled ? 'not-allowed' : 'pointer',
-                transition: 'background 0.18s var(--sp-ease), color 0.18s var(--sp-ease)',
-              }}
-            >
-              {chip.label}
-            </button>
-          );
-        })}
+      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+        <div
+          role="tablist"
+          aria-label="Shot type"
+          style={{
+            display: 'flex',
+            gap: '6px',
+            overflowX: 'auto',
+            paddingBottom: '2px',
+            flex: 1,
+            minWidth: 0,
+          }}
+        >
+          {SHOT_CHIPS.map((chip) => {
+            const isActive = chip.id === value;
+            return (
+              <button
+                key={chip.id}
+                role="tab"
+                aria-selected={isActive}
+                disabled={disabled}
+                onClick={() => onChange(chip.id)}
+                className={isActive ? 'sp-tap' : 'sp-tap sp-tap-surface'}
+                style={{
+                  flex: '0 0 auto',
+                  padding: '6px 12px',
+                  borderRadius: '999px',
+                  background: 'var(--sp-surface)',
+                  color: isActive ? 'var(--sp-text)' : 'var(--sp-text-secondary)',
+                  border: isActive
+                    ? '1px solid var(--sp-accent-edge)'
+                    : '1px solid var(--sp-border)',
+                  fontSize: '12px',
+                  fontWeight: isActive ? 700 : 600,
+                  cursor: disabled ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {chip.label}
+              </button>
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          aria-label={showDescription ? 'Hide shot description' : 'Show shot description'}
+          aria-expanded={showDescription}
+          disabled={disabled}
+          onClick={() => setShowDescription((v) => !v)}
+          className="sp-tap sp-tap-surface"
+          style={{
+            flex: '0 0 auto',
+            width: '28px',
+            height: '28px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: '999px',
+            background: showDescription ? 'var(--sp-surface-2)' : 'var(--sp-surface)',
+            color: showDescription ? 'var(--sp-text)' : 'var(--sp-text-secondary)',
+            border: '1px solid var(--sp-border)',
+            cursor: disabled ? 'not-allowed' : 'pointer',
+            padding: 0,
+          }}
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="12" r="9" />
+            <line x1="12" y1="11" x2="12" y2="16" />
+            <circle cx="12" cy="8" r="0.6" fill="currentColor" />
+          </svg>
+        </button>
       </div>
 
       {/* Live preview panel: tiny shape sketch + one-line description
-       *  for the currently selected shot type. Always visible so the
-       *  user can browse types and see what they'd produce before
-       *  committing to a kick. */}
-      <div
-        aria-live="polite"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          padding: '8px 10px',
-          borderRadius: 'var(--sp-radius-sm)',
-          background: 'var(--sp-surface-2)',
-          border: '1px solid var(--sp-border-subtle)',
-        }}
-      >
-        <ShotShapePreview type={active.id} />
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div
-            className="sp-uppercase sp-secondary"
-            style={{ marginBottom: '1px', fontSize: '10px' }}
-          >
-            {active.label} shape
-          </div>
-          <div
-            style={{
-              fontSize: '12px',
-              lineHeight: 1.35,
-              color: 'var(--sp-text)',
-            }}
-          >
-            {active.description}
+       *  for the currently selected shot type. Collapsed by default;
+       *  toggled via the info button above. */}
+      {showDescription && (
+        <div
+          aria-live="polite"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            padding: '8px 10px',
+            borderRadius: 'var(--sp-radius-sm)',
+            background: 'var(--sp-surface-2)',
+            border: '1px solid var(--sp-border-subtle)',
+          }}
+        >
+          <ShotShapePreview type={active.id} />
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div
+              className="sp-uppercase sp-secondary"
+              style={{ marginBottom: '1px', fontSize: '10px' }}
+            >
+              {active.label} shape
+            </div>
+            <div
+              style={{
+                fontSize: '12px',
+                lineHeight: 1.35,
+                color: 'var(--sp-text)',
+              }}
+            >
+              {active.description}
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -783,7 +834,7 @@ function ShotShapePreview({ type }: { type: ShotType }) {
   // Baseline + path per shot type. All paths sit on y = H (the baseline)
   // and peak/extend upward.
   let d = '';
-  if (type === 'strike') {
+  if (type === 'direct') {
     // Narrow Gaussian-ish peak in the middle.
     d = `M 4 ${H} Q ${W / 2} ${H - 4} ${W / 2 - 6} ${H - 22} Q ${W / 2} ${H - 30} ${W / 2 + 6} ${H - 22} Q ${W / 2} ${H - 4} ${W - 4} ${H}`;
   } else if (type === 'curl') {
@@ -891,7 +942,7 @@ function PhaseHint({
   shotType: ShotType;
   aimOutcome: string | null;
 }) {
-  const baseStyle = { fontSize: '13px', color: 'var(--sp-text-secondary)' };
+  const baseStyle = { fontSize: '12px', color: 'var(--sp-text-secondary)' };
   if (state === 'ready') {
     return (
       <span style={baseStyle}>
@@ -910,7 +961,6 @@ function PhaseHint({
     return (
       <span style={baseStyle}>
         Hit Lock at the apex for a clean {shotTypeNoun(shotType)}. Miss it and the kick sprays wider.
-        {aimOutcome ? <> Aiming at <span className="sp-mono">{aimOutcome}</span>.</> : null}
       </span>
     );
   }
@@ -926,6 +976,6 @@ function shotTypeNoun(t: ShotType): string {
     case 'sweep':
       return 'sweep';
     default:
-      return 'strike';
+      return 'direct';
   }
 }

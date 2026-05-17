@@ -116,6 +116,7 @@ export function MarketPickerModal({
               <button
                 onClick={onClose}
                 aria-label="Close"
+                className="sp-tap sp-tap-surface"
                 style={{
                   width: '28px',
                   height: '28px',
@@ -128,6 +129,7 @@ export function MarketPickerModal({
                   color: 'var(--sp-text-secondary)',
                   fontSize: '14px',
                   lineHeight: 1,
+                  cursor: 'pointer',
                 }}
               >
                 ×
@@ -157,6 +159,7 @@ export function MarketPickerModal({
                     role="tab"
                     aria-selected={active}
                     onClick={() => setScope(id)}
+                    className={active ? 'sp-tap' : 'sp-tap sp-tap-chip'}
                     style={{
                       padding: '6px 14px',
                       borderRadius: '999px',
@@ -164,7 +167,7 @@ export function MarketPickerModal({
                       color: active ? 'var(--sp-on-primary)' : 'var(--sp-text-secondary)',
                       fontSize: '12px',
                       fontWeight: 600,
-                      transition: 'background 0.18s var(--sp-ease), color 0.18s var(--sp-ease)',
+                      cursor: 'pointer',
                     }}
                   >
                     {label}

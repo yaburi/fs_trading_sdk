@@ -263,6 +263,7 @@ function SheetHeader({
         type="button"
         onClick={onClose}
         aria-label="Close"
+        className="sp-tap sp-tap-surface"
         style={{
           width: '30px',
           height: '30px',
@@ -276,6 +277,7 @@ function SheetHeader({
           display: 'inline-flex',
           alignItems: 'center',
           justifyContent: 'center',
+          cursor: 'pointer',
         }}
       >
         ×

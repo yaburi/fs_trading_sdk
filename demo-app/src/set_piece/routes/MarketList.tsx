@@ -67,15 +67,19 @@ export default function MarketList() {
             </div>
             <button
               onClick={() => refetch()}
+              className="sp-tap sp-tap-primary"
               style={{
                 marginTop: '8px',
                 alignSelf: 'flex-start',
                 padding: '8px 16px',
                 borderRadius: '999px',
-                background: 'var(--sp-primary)',
+                background:
+                  'linear-gradient(180deg, #2E2E30 0%, #161618 55%, #060608 100%)',
                 color: 'var(--sp-on-primary)',
                 fontSize: '13px',
                 fontWeight: 600,
+                cursor: 'pointer',
+                border: 'none',
               }}
             >
               Try again
@@ -157,6 +161,7 @@ function ScopeToggle({
             role="tab"
             aria-selected={active}
             onClick={() => onChange(t.id)}
+            className={active ? 'sp-tap' : 'sp-tap sp-tap-chip'}
             style={{
               padding: '6px 14px',
               borderRadius: '999px',
@@ -164,7 +169,6 @@ function ScopeToggle({
               color: active ? 'var(--sp-on-primary)' : 'var(--sp-text-secondary)',
               fontSize: '12px',
               fontWeight: 600,
-              transition: 'background 0.18s var(--sp-ease), color 0.18s var(--sp-ease)',
             }}
           >
             {t.label}

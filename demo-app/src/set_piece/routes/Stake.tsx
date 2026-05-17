@@ -84,6 +84,7 @@ export default function Stake() {
   };
 
   const handleContinue = () => navigate(`/m/${marketId}/play`);
+  const maxActive = Math.round(stake) === walletMax;
 
   return (
     <PageShell
@@ -284,18 +285,24 @@ export default function Stake() {
                 key={value}
                 onClick={() => handlePick(value)}
                 disabled={value > walletMax}
+                // `sp-tap-surface` has a bright top inset highlight tuned
+                // for white surfaces; on the dark active button it would
+                // show as a 1px white stripe. Swap to `sp-tap-primary`
+                // (a faint 0.22 highlight tuned for dark) when selected.
+                className={active ? 'sp-tap sp-tap-primary' : 'sp-tap sp-tap-surface'}
                 style={{
                   padding: '8px 0',
                   borderRadius: 'var(--sp-radius-pill)',
-                  border: '1px solid var(--sp-border)',
-                  background: active ? 'var(--sp-primary)' : 'var(--sp-surface)',
+                  border: active ? '1px solid transparent' : '1px solid var(--sp-border)',
+                  background: active
+                    ? 'linear-gradient(180deg, #2E2E30 0%, #161618 55%, #060608 100%)'
+                    : 'var(--sp-surface)',
                   color: active ? 'var(--sp-on-primary)' : 'var(--sp-text)',
                   fontSize: '13px',
                   fontWeight: 600,
                   fontFamily: 'var(--sp-font-mono)',
                   cursor: value > walletMax ? 'not-allowed' : 'pointer',
                   opacity: value > walletMax ? 0.4 : 1,
-                  transition: 'all 0.15s var(--sp-ease)',
                 }}
               >
                 ${value}
@@ -304,18 +311,19 @@ export default function Stake() {
           })}
           <button
             onClick={handleMax}
+            className={maxActive ? 'sp-tap sp-tap-primary' : 'sp-tap sp-tap-surface'}
             style={{
               padding: '8px 0',
               borderRadius: 'var(--sp-radius-pill)',
-              border: '1px solid var(--sp-border)',
-              background:
-                Math.round(stake) === walletMax ? 'var(--sp-primary)' : 'var(--sp-surface)',
-              color: Math.round(stake) === walletMax ? 'var(--sp-on-primary)' : 'var(--sp-text)',
+              border: maxActive ? '1px solid transparent' : '1px solid var(--sp-border)',
+              background: maxActive
+                ? 'linear-gradient(180deg, #2E2E30 0%, #161618 55%, #060608 100%)'
+                : 'var(--sp-surface)',
+              color: maxActive ? 'var(--sp-on-primary)' : 'var(--sp-text)',
               fontSize: '12px',
               fontWeight: 700,
               letterSpacing: '0.04em',
               cursor: 'pointer',
-              transition: 'all 0.15s var(--sp-ease)',
             }}
           >
             MAX

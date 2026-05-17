@@ -171,10 +171,12 @@ export function IntroSheet({ forceShow = false }: IntroSheetProps) {
               </div>
               <button
                 onClick={close}
+                className="sp-tap sp-tap-link"
                 style={{
                   fontSize: '12px',
                   color: 'var(--sp-text-secondary)',
                   fontWeight: 500,
+                  cursor: 'pointer',
                 }}
               >
                 Skip
