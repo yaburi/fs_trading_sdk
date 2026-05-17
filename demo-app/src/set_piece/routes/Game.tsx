@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useAuth, useConsensus, useMarket, usePreviewPayout } from '@functionspace/react';
+import { useAuth, useBuy, useConsensus, useMarket, usePreviewPayout } from '@functionspace/react';
 import type { PayoutCurve } from '@functionspace/core';
 import { PageShell } from '../components/PageShell';
 import { Header } from '../components/Header';
@@ -9,6 +9,7 @@ import { Pill } from '../components/Pill';
 import { MarketIcon } from '../components/MarketIcon';
 import { AuthSheet } from '../components/AuthSheet';
 import { MarketPickerModal } from '../components/MarketPickerModal';
+import { GoalCelebration } from '../components/GoalCelebration';
 import { Pitch } from '../game/Pitch';
 import { useKickEngine, type ShotType } from '../game/useKickEngine';
 import { useComposedBelief } from '../game/useComposedBelief';
@@ -24,10 +25,13 @@ export default function Game() {
   const engine = useKickEngine(market, shotType);
   const composed = useComposedBelief(market, round.kicks, 80);
   const kicksRemaining = ROUND_CONSTANTS.MAX_KICKS - round.kicks.length;
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, refreshUser } = useAuth();
+  const buy = useBuy(marketId ?? '');
   const [authOpen, setAuthOpen] = useState(false);
   const [pendingSubmit, setPendingSubmit] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [celebrating, setCelebrating] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   // Ensure the round context is bound to the URL's marketId. This handles
   // direct links and the in-Game "Change market" flow which navigates
@@ -37,14 +41,34 @@ export default function Game() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [marketId]);
 
-  // After guest taps Submit, sign-in success advances them to /confirm.
+  const submitBuy = useCallback(async () => {
+    if (!composed) return;
+    setSubmitting(true);
+    try {
+      await buy.execute(composed.vector, round.stake);
+      setCelebrating(true);
+      refreshUser().catch(() => {});
+      // Hold the celebration for ~1.5s so the spring + GOOOAL! lands, then
+      // navigate to the /calls list which acts as the receipt.
+      setTimeout(() => {
+        round.resetKicks();
+        navigate('/calls');
+      }, 1500);
+    } catch {
+      // Surface the error in the footer; the celebration won't trigger.
+    } finally {
+      setSubmitting(false);
+    }
+  }, [composed, buy, round, navigate, refreshUser]);
+
+  // After guest taps Submit and signs in, kick off the buy automatically.
   useEffect(() => {
     if (isAuthenticated && pendingSubmit) {
       setPendingSubmit(false);
       setAuthOpen(false);
-      navigate(`/m/${marketId}/confirm`);
+      void submitBuy();
     }
-  }, [isAuthenticated, pendingSubmit, marketId, navigate]);
+  }, [isAuthenticated, pendingSubmit, submitBuy]);
 
   // Live payout preview, debounced. Skipped for guests because the SDK client
   // rejects all POSTs without a token; sign-in is offered inline instead.
@@ -210,7 +234,8 @@ export default function Game() {
     return 'var(--sp-text)';
   }, [payoutSummary, round.stake]);
 
-  const canFinalize = round.kicks.length > 0 && engine.state === 'ready';
+  const canFinalize =
+    round.kicks.length > 0 && engine.state === 'ready' && !submitting && !celebrating;
   const handleSubmit = () => {
     if (!canFinalize) return;
     if (!isAuthenticated) {
@@ -218,18 +243,35 @@ export default function Game() {
       setAuthOpen(true);
       return;
     }
-    navigate(`/m/${marketId}/confirm`);
+    void submitBuy();
   };
   const handleClear = () => {
     if (!canFinalize) return;
     round.resetKicks();
   };
 
+  const submitLabel = submitting
+    ? 'Striking…'
+    : !isAuthenticated && round.kicks.length > 0
+      ? 'Sign in to submit'
+      : 'Submit';
+
   return (
     <PageShell
       header={<Header onBack={() => navigate(-1)} centerLabel="Free kick" />}
       footer={
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {buy.error && (
+            <div
+              style={{
+                color: 'var(--sp-negative)',
+                fontSize: '12px',
+                textAlign: 'center',
+              }}
+            >
+              {buy.error.message}
+            </div>
+          )}
           {/* Shot-type chooser. Default 'strike' matches the original kick;
            *  the others reshape the committed region without changing the
            *  aim/time flow. Disabled while a kick is in flight. */}
@@ -256,7 +298,7 @@ export default function Game() {
               disabled={!canFinalize}
               onClick={handleSubmit}
             >
-              Submit
+              {submitLabel}
             </Pill>
           </div>
 
@@ -366,6 +408,7 @@ export default function Game() {
               ballTarget={ballTarget}
               onBallSettled={engine.onLanded}
               timing={timing}
+              shotType={shotType}
             />
           ) : (
             <div
@@ -544,6 +587,8 @@ export default function Game() {
           navigate(`/m/${m.marketId}/play`);
         }}
       />
+
+      <GoalCelebration visible={celebrating} />
     </PageShell>
   );
 }
@@ -613,22 +658,22 @@ const SHOT_CHIPS: ShotChipDef[] = [
   {
     id: 'strike',
     label: 'Strike',
-    description: 'Tight, accurate. Backs one outcome strongly.',
+    description: 'Laser-flat. All your conviction on a single number.',
   },
   {
     id: 'curl',
     label: 'Curl',
-    description: 'Bends toward the side you aim at. Slightly off-center belief.',
+    description: 'Bends mid-air. Leans your call toward one side of the target.',
   },
   {
     id: 'chip',
     label: 'Chip',
-    description: 'Lofted and wider. Hedges around your aim.',
+    description: 'Lifted and lazy. Spreads your call wider around the aim.',
   },
   {
     id: 'sweep',
     label: 'Sweep',
-    description: 'Covers a whole band of outcomes around your aim.',
+    description: 'A floating cross. Covers a whole band of outcomes at once.',
   },
 ];
 
@@ -677,7 +722,7 @@ function ShotTypeChips({
                 borderRadius: '999px',
                 background: isActive ? 'var(--sp-primary)' : 'var(--sp-surface)',
                 color: isActive ? 'var(--sp-on-primary)' : 'var(--sp-text-secondary)',
-                border: isActive ? 'none' : '1px solid var(--sp-border)',
+                border: isActive ? '1px solid transparent' : '1px solid var(--sp-border)',
                 fontSize: '12px',
                 fontWeight: 600,
                 cursor: disabled ? 'not-allowed' : 'pointer',
@@ -851,20 +896,20 @@ function PhaseHint({
     return (
       <span style={baseStyle}>
         {kicksTaken === 0
-          ? 'Step up. Tap Kick when you\'re ready.'
+          ? "On the spot. Hit Kick when you're ready."
           : kicksTaken < ROUND_CONSTANTS.MAX_KICKS
-            ? 'Take another kick or submit your prediction.'
-            : 'Max kicks taken. Submit when ready.'}
+            ? 'Stack another kick or lock it in.'
+            : 'Five kicks down. Time to lock it in.'}
       </span>
     );
   }
   if (state === 'aiming') {
-    return <span style={baseStyle}>Watch the dot. Tap Lock aim where you want to score.</span>;
+    return <span style={baseStyle}>Pick your spot. Tap Lock aim when the dot is where you want to score.</span>;
   }
   if (state === 'timing') {
     return (
       <span style={baseStyle}>
-        Tap Lock at the very top of the arc. Miss it and your {shotTypeNoun(shotType)} sprays wider.
+        Hit Lock at the apex for a clean {shotTypeNoun(shotType)}. Miss it and the kick sprays wider.
         {aimOutcome ? <> Aiming at <span className="sp-mono">{aimOutcome}</span>.</> : null}
       </span>
     );

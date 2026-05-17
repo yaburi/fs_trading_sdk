@@ -34,23 +34,23 @@ const glyphStack: ReactNode = (
 const STEPS = [
   {
     overline: 'Step 1',
-    title: 'Pick a market',
+    title: 'Pick your match-up',
     body:
-      "Yellow cards. VAR overturns. Attendance. Pick any World Cup market that pulls you in.",
+      "Yellow cards. VAR calls. Goals. Stadium attendance. Pick whichever World Cup market you have a feel for.",
     badge: { bg: '#FEF3C7', fg: '#D97706', glyph: glyphPick },
   },
   {
     overline: 'Step 2',
-    title: 'Aim, time, kick',
+    title: 'Take the kick',
     body:
-      "Lock the aim where you want to score. Time the kick inside the sweet spot for conviction. Miss the sweet spot and your kick sprays wider.",
+      "Line up the aim, time your release on the meter. Hit the sweet spot for a tight, confident shot. Miss it and your kick sprays — your call gets fuzzier.",
     badge: { bg: '#FFEDD5', fg: '#EA580C', glyph: glyphAim },
   },
   {
     overline: 'Step 3',
-    title: 'Go against the crowd',
+    title: 'Beat the crowd',
     body:
-      "Take up to 5 kicks. Each one adds to your prediction. The crowded zones pay less because everyone is there. Aim where the crowd isn't for a bigger payout when you're right.",
+      "You get up to 5 kicks. Stack them tight for conviction, or spread them wide to hedge. Aim where the crowd isn't — that's where the big payouts live.",
     badge: { bg: '#FCE7F3', fg: '#DB2777', glyph: glyphStack },
   },
 ];

@@ -256,3 +256,42 @@ select {
   transform: scale(1.12);
   cursor: grabbing;
 }
+
+/* Skeleton shimmer for loading placeholders */
+@keyframes sp-skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.sp-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--sp-surface-2) 0%,
+    var(--sp-border-subtle) 40%,
+    var(--sp-border) 50%,
+    var(--sp-border-subtle) 60%,
+    var(--sp-surface-2) 100%
+  );
+  background-size: 200% 100%;
+  animation: sp-skeleton-shimmer 1.4s linear infinite;
+  border-radius: 6px;
+}
+
+.sp-skeleton-circle {
+  border-radius: 999px;
+}
+
+.sp-skeleton-pill {
+  border-radius: 999px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sp-skeleton {
+    animation: none;
+    background: var(--sp-surface-2);
+  }
+}

@@ -96,7 +96,7 @@ export default function Stake() {
           disabled={!market || loading}
           onClick={handleContinue}
         >
-          Start kicking →
+          Take the kick →
         </Pill>
       }
     >
@@ -109,7 +109,7 @@ export default function Stake() {
             <MarketIcon market={market} size={44} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="sp-uppercase sp-secondary" style={{ marginBottom: '6px' }}>
-                You're betting on
+                Your match-up
               </div>
               <div
                 className="sp-display-md"
@@ -333,8 +333,8 @@ export default function Stake() {
           padding: '0 8px',
         }}
       >
-        You'll take 1 to 5 kicks. Each kick adds to your prediction.
-        Aim where the crowd isn't for a bigger potential payout.
+        Five kicks max. Stack them tight for conviction, or fan them out to hedge.
+        Where the crowd isn't, the payout is.
       </div>
     </PageShell>
   );

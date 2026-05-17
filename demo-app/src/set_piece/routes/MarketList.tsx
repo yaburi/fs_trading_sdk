@@ -36,9 +36,11 @@ export default function MarketList() {
             letterSpacing: '-0.03em',
           }}
         >
-          Predict the World Cup,
+          Step up.
           <br />
-          one free kick at a time.
+          Pick the World Cup
+          <br />
+          one kick at a time.
         </h1>
         <p
           className="sp-secondary"
@@ -48,7 +50,7 @@ export default function MarketList() {
             lineHeight: 1.5,
           }}
         >
-          Pick a market. Aim, time, kick. Each kick shapes your prediction. Going against the crowd pays more when you're right.
+          Skip the sliders. Aim, time, kick — your shots become your call. Land it where the crowd isn't and the payout opens up.
         </p>
       </div>
 
@@ -174,45 +176,47 @@ function ScopeToggle({
 }
 
 function SkeletonList() {
+  const rows = [
+    { titleA: '78%', titleB: '52%', tagA: '64px', tagB: '78px' },
+    { titleA: '68%', titleB: '40%', tagA: '64px', tagB: '54px' },
+    { titleA: '82%', titleB: '60%', tagA: '64px', tagB: '88px' },
+    { titleA: '60%', titleB: '34%', tagA: '64px', tagB: '0' },
+  ];
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-      {[0, 1, 2, 3].map((i) => (
-        <Card key={i}>
-          <div
-            style={{
-              height: '14px',
-              width: '70%',
-              background: 'var(--sp-surface-2)',
-              borderRadius: '4px',
-              marginBottom: '8px',
-            }}
-          />
-          <div
-            style={{
-              height: '14px',
-              width: '45%',
-              background: 'var(--sp-surface-2)',
-              borderRadius: '4px',
-              marginBottom: '14px',
-            }}
-          />
-          <div style={{ display: 'flex', gap: '6px' }}>
+      {rows.map((r, i) => (
+        <Card key={i} padding="lg">
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
             <div
-              style={{
-                height: '18px',
-                width: '60px',
-                background: 'var(--sp-surface-2)',
-                borderRadius: '999px',
-              }}
+              className="sp-skeleton sp-skeleton-circle"
+              style={{ width: '40px', height: '40px', flexShrink: 0 }}
             />
-            <div
-              style={{
-                height: '18px',
-                width: '70px',
-                background: 'var(--sp-surface-2)',
-                borderRadius: '999px',
-              }}
-            />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div
+                className="sp-skeleton"
+                style={{ height: '14px', width: r.titleA, marginBottom: '8px' }}
+              />
+              <div
+                className="sp-skeleton"
+                style={{ height: '14px', width: r.titleB, marginBottom: '14px' }}
+              />
+              <div
+                className="sp-skeleton"
+                style={{ height: '10px', width: '42%', marginBottom: '12px' }}
+              />
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <div
+                  className="sp-skeleton sp-skeleton-pill"
+                  style={{ height: '18px', width: r.tagA }}
+                />
+                {r.tagB !== '0' && (
+                  <div
+                    className="sp-skeleton sp-skeleton-pill"
+                    style={{ height: '18px', width: r.tagB }}
+                  />
+                )}
+              </div>
+            </div>
           </div>
         </Card>
       ))}

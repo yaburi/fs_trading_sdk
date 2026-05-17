@@ -13,6 +13,7 @@
     "@functionspace/react": "*",
     "@functionspace/ui": "*",
     "framer-motion": "^12.38.0",
+    "iconoir-react": "^7.11.0",
     "playwright": "^1.58.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

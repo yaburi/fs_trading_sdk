@@ -19,7 +19,7 @@ type TabKey = 'open' | 'history';
 export default function MyCalls() {
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
-  const { markets } = useMarkets({ categories: ['World Cup'] });
+  const { markets, loading: marketsLoading } = useMarkets({ categories: ['World Cup'] });
   const [authOpen, setAuthOpen] = useState(false);
   const [tab, setTab] = useState<TabKey>('open');
 
@@ -70,6 +70,7 @@ export default function MyCalls() {
 
       <PositionsList
         markets={markets}
+        marketsLoading={marketsLoading}
         username={user?.username ?? ''}
         tab={tab}
         onPickMarket={(id) => navigate(`/m/${id}/stake`)}
@@ -109,21 +110,24 @@ function TabButton({
 
 function PositionsList({
   markets,
+  marketsLoading,
   username,
   tab,
   onPickMarket,
 }: {
   markets: MarketState[];
+  marketsLoading: boolean;
   username: string;
   tab: TabKey;
   onPickMarket: (id: string | number) => void;
 }) {
   // Per-market filtered position counts, populated as each block loads.
-  // Resets when the tab switches so we recompute "all empty" against the new filter.
+  // We deliberately do NOT reset on tab change: parent useEffects fire after
+  // child useEffects, so a reset here would clobber the child onCount updates
+  // that have already queued for the new tab, leaving counts permanently
+  // empty and the skeleton stuck. Each block re-fires its effect when its
+  // filtered.length changes across tabs, so stale values get overwritten.
   const [counts, setCounts] = useState<Record<string, number>>({});
-  useEffect(() => {
-    setCounts({});
-  }, [tab]);
   const handleCount = useCallback((marketId: string | number, count: number) => {
     setCounts((prev) => {
       const key = String(marketId);
@@ -132,30 +136,40 @@ function PositionsList({
     });
   }, []);
 
-  const allLoaded = Object.keys(counts).length >= markets.length && markets.length > 0;
+  // "Loaded" means the markets list has resolved AND every per-market block
+  // has reported its count. With zero markets there's nothing to wait on, so
+  // allLoaded flips true the moment marketsLoading turns false.
+  const allLoaded = !marketsLoading && Object.keys(counts).length >= markets.length;
   const hasAny = Object.values(counts).some((c) => c > 0);
   const showEmpty = allLoaded && !hasAny;
+  // Keep skeletons up while we don't yet know what to render: markets list
+  // still resolving, or markets in but no block has rendered or reported yet.
+  // Falls through to showEmpty or real blocks the moment we know.
+  const showTopLevelSkeleton =
+    marketsLoading || (markets.length > 0 && !allLoaded && !hasAny);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-      {markets.length === 0 ? (
-        <Card>
-          <div className="sp-secondary" style={{ fontSize: '13px' }}>
-            Loading markets…
-          </div>
-        </Card>
-      ) : (
-        markets.map((m) => (
-          <MarketPositionsBlock
-            key={m.marketId}
-            market={m}
-            username={username}
-            tab={tab}
-            onPickMarket={onPickMarket}
-            onCount={handleCount}
-          />
-        ))
+      {showTopLevelSkeleton && (
+        <>
+          <PositionBlockSkeleton positions={2} />
+          <PositionBlockSkeleton positions={1} />
+        </>
       )}
+      {/* Real blocks mount even while skeletons are visible so the per-market
+       * usePositions queries fire and report their counts back up. Each block
+       * stays null until it has real content, so they sit behind the skeletons
+       * and reveal themselves as the data lands. */}
+      {markets.map((m) => (
+        <MarketPositionsBlock
+          key={m.marketId}
+          market={m}
+          username={username}
+          tab={tab}
+          onPickMarket={onPickMarket}
+          onCount={handleCount}
+        />
+      ))}
       {showEmpty && (
         <EmptyAcrossAllHint markets={markets} tab={tab} onPickMarket={onPickMarket} />
       )}
@@ -180,7 +194,7 @@ function MarketPositionsBlock({
   onPickMarket: (id: string | number) => void;
   onCount: (marketId: string | number, count: number) => void;
 }) {
-  const { positions, loading } = usePositions(market.marketId, username, {
+  const { positions, loading, error } = usePositions(market.marketId, username, {
     pollInterval: 20000,
   });
 
@@ -191,12 +205,16 @@ function MarketPositionsBlock({
       : positions.filter((p) => p.status !== 'open');
   }, [positions, tab]);
 
-  // Report count to parent once positions resolve so it knows when to show
-  // the "no positions anywhere" empty state.
+  // Report count to parent once we have a definitive answer: a populated
+  // positions array OR an error. Loading is false in this hook even before
+  // a fetch has kicked off (status='idle' with data=null), so guarding on
+  // !loading alone would briefly report 0 for every block and flash the
+  // empty state before real data arrives.
+  const hasResult = positions != null || error != null;
   useEffect(() => {
-    if (loading || !positions) return;
+    if (loading || !hasResult) return;
     onCount(market.marketId, filtered.length);
-  }, [loading, positions, filtered.length, market.marketId, onCount]);
+  }, [loading, hasResult, filtered.length, market.marketId, onCount]);
 
   if (loading || filtered.length === 0) return null;
 
@@ -244,7 +262,7 @@ function MarketPositionsBlock({
             fontWeight: 500,
           }}
         >
-          Add kick →
+          View Market →
         </button>
       </div>
 
@@ -393,5 +411,83 @@ function EmptyAcrossAllHint({
         )}
       </div>
     </Card>
+  );
+}
+
+/** Skeleton placeholder mirroring MarketPositionsBlock: header row with icon,
+ * title, and trailing button, followed by N inset position rows. */
+function PositionBlockSkeleton({ positions = 2 }: { positions?: number }) {
+  return (
+    <Card padding="md">
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          marginBottom: '12px',
+        }}
+      >
+        <div
+          className="sp-skeleton sp-skeleton-circle"
+          style={{ width: '36px', height: '36px', flexShrink: 0 }}
+        />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            className="sp-skeleton"
+            style={{ height: '12px', width: '80%', marginBottom: '6px' }}
+          />
+          <div
+            className="sp-skeleton"
+            style={{ height: '10px', width: '32%' }}
+          />
+        </div>
+        <div
+          className="sp-skeleton sp-skeleton-pill"
+          style={{ width: '84px', height: '26px', flexShrink: 0 }}
+        />
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        {Array.from({ length: positions }).map((_, i) => (
+          <PositionRowSkeleton key={i} />
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function PositionRowSkeleton() {
+  return (
+    <div
+      style={{
+        background: 'var(--sp-surface-2)',
+        border: '1px solid var(--sp-border-subtle)',
+        borderRadius: 'var(--sp-radius-md)',
+        padding: '12px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '12px',
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          className="sp-skeleton"
+          style={{ height: '8px', width: '38%', marginBottom: '6px' }}
+        />
+        <div
+          className="sp-skeleton"
+          style={{ height: '18px', width: '52%', marginBottom: '6px' }}
+        />
+        <div
+          className="sp-skeleton"
+          style={{ height: '9px', width: '64%' }}
+        />
+      </div>
+      <div
+        className="sp-skeleton sp-skeleton-pill"
+        style={{ width: '58px', height: '30px', flexShrink: 0 }}
+      />
+    </div>
   );
 }

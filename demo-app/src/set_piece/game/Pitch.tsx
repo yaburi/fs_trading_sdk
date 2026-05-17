@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
 import type { MarketState, ConsensusCurve, Region } from '@functionspace/core';
+import type { ShotType } from './useKickEngine';
 
 /**
  * The pitch canvas — the visual home of every kick.
@@ -81,6 +81,8 @@ interface PitchProps {
   onBallSettled?: () => void;
   /** When set, the curved shot-meter overlay is rendered on the right side. */
   timing?: TimingDescriptor | null;
+  /** Reshapes the ball's flight curve per shot. Default `strike`. */
+  shotType?: ShotType;
 }
 
 export function Pitch({
@@ -92,6 +94,7 @@ export function Pitch({
   ballTarget,
   onBallSettled,
   timing,
+  shotType = 'strike',
 }: PitchProps) {
   const { lowerBound, upperBound } = market.config;
   const decimals = market.decimals ?? 0;
@@ -101,14 +104,6 @@ export function Pitch({
       maximumFractionDigits: decimals,
     });
 
-  const ballAtPenalty = !ballTarget;
-  const ballTargetPixel = ballTarget
-    ? {
-        x: aimToPixelX(ballTarget.x) - PITCH.ballX,
-        y: PITCH.goalBottom - PITCH.ballY,
-      }
-    : { x: 0, y: 0 };
-
   return (
     <div
       className="sp-pitch-canvas"
@@ -117,8 +112,12 @@ export function Pitch({
         width: '100%',
         borderRadius: 'var(--sp-radius-md)',
         overflow: 'hidden',
-        background:
-          'radial-gradient(ellipse 80% 60% at 50% 20%, var(--sp-pitch-grass-glow), var(--sp-pitch-grass-fade) 70%), linear-gradient(180deg, var(--sp-pitch-top) 0%, var(--sp-pitch-bot) 100%)',
+        // Layered: distant sky → stand → grass. Mimics what you'd see
+        // from a low camera behind the penalty spot.
+        background: [
+          'radial-gradient(ellipse 90% 60% at 50% 14%, rgba(255, 240, 200, 0.18), transparent 60%)',
+          'linear-gradient(180deg, #1B2541 0%, #2A3960 22%, #6B8E5F 38%, #6FA265 60%, #7DB672 100%)',
+        ].join(', '),
       }}
     >
       <svg
@@ -136,27 +135,146 @@ export function Pitch({
             <stop offset="0%" stopColor="var(--sp-keeper-light)" />
             <stop offset="100%" stopColor="var(--sp-keeper-dark)" />
           </linearGradient>
-          <radialGradient id="ballGloss" cx="35%" cy="30%" r="50%">
-            <stop offset="0%" stopColor="var(--sp-ball-gloss)" />
-            <stop offset="60%" stopColor="rgba(255, 255, 255, 0)" />
+
+          {/* Ball is a real 3D-ish sphere with a hard top-left highlight and
+           *  occlusion shadow on the bottom-right. */}
+          <radialGradient id="ballSphere" cx="35%" cy="30%" r="62%">
+            <stop offset="0%" stopColor="#FFFFFF" />
+            <stop offset="55%" stopColor="#F4F4F0" />
+            <stop offset="100%" stopColor="#B7B7B0" />
           </radialGradient>
+          <radialGradient id="ballGloss" cx="32%" cy="22%" r="35%">
+            <stop offset="0%" stopColor="rgba(255,255,255,0.95)" />
+            <stop offset="100%" stopColor="rgba(255,255,255,0)" />
+          </radialGradient>
+
+          {/* Goal posts get a vertical gradient so the round face catches
+           *  light at the top-left and falls into shadow on the back. */}
+          <linearGradient id="postFace" x1="0" x2="1" y1="0" y2="0">
+            <stop offset="0%" stopColor="#FFFFFF" />
+            <stop offset="55%" stopColor="#F1F1F0" />
+            <stop offset="100%" stopColor="#B7B7B6" />
+          </linearGradient>
+          <linearGradient id="crossbarFace" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="#FFFFFF" />
+            <stop offset="60%" stopColor="#F1F1F0" />
+            <stop offset="100%" stopColor="#B7B7B6" />
+          </linearGradient>
+
+          {/* Grass with a hint of mowed stripes. Subtle alternating bands of
+           *  brightness paint a "diagonal stripe" pattern across the field. */}
+          <pattern id="grassStripes" x="0" y="0" width="32" height="32" patternUnits="userSpaceOnUse">
+            <rect width="32" height="32" fill="transparent" />
+            <rect x="0" y="0" width="16" height="32" fill="rgba(255,255,255,0.025)" />
+          </pattern>
+
+          {/* Net: a tight diamond mesh applied as a fill pattern over the
+           *  goal interior. White with very low opacity so the keeper /
+           *  heat zones still read through. */}
+          <pattern id="goalNet" x="0" y="0" width="9" height="9" patternUnits="userSpaceOnUse">
+            <path
+              d="M 0 4.5 L 4.5 0 L 9 4.5 L 4.5 9 Z"
+              fill="none"
+              stroke="rgba(255,255,255,0.45)"
+              strokeWidth="0.55"
+              strokeLinejoin="round"
+            />
+            <circle cx="4.5" cy="4.5" r="0.5" fill="rgba(255,255,255,0.25)" />
+          </pattern>
+
+          {/* Crowd silhouette: tightly packed dots up top. We render this
+           *  as a stippled mask so the band reads as "people" instead of a
+           *  flat color block. */}
+          <pattern id="crowdDots" x="0" y="0" width="4" height="3" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1.5" r="0.65" fill="rgba(0,0,0,0.42)" />
+            <circle cx="3" cy="1.5" r="0.55" fill="rgba(0,0,0,0.32)" />
+          </pattern>
+
+          {/* Stadium-light bloom directly above the goal. Two soft suns
+           *  flare from the rim of the lower-bowl. */}
+          <radialGradient id="floodlight" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="rgba(255, 248, 220, 0.55)" />
+            <stop offset="60%" stopColor="rgba(255, 248, 220, 0.1)" />
+            <stop offset="100%" stopColor="rgba(255, 248, 220, 0)" />
+          </radialGradient>
+
+          {/* Soft drop shadow for the ball and goal posts. */}
+          <filter id="softShadow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="0.9" />
+          </filter>
         </defs>
 
-        {/* Penalty arc */}
-        <path
-          d={`M ${PITCH.ballX - 60} ${PITCH.ballY - 12} Q ${PITCH.ballX} ${
-            PITCH.ballY - 28
-          } ${PITCH.ballX + 60} ${PITCH.ballY - 12}`}
+        {/* === STADIUM BACKDROP ============================================ */}
+        {/* Lower stand strip — slightly darker than sky, with a crowd
+         *  stipple over the top half so the band reads as occupants. */}
+        <rect x="0" y="0" width={VIEW_W} height="40" fill="rgba(20, 28, 56, 0.55)" />
+        <rect x="0" y="6" width={VIEW_W} height="22" fill="url(#crowdDots)" />
+        {/* Two floodlight bloom suns flank the stadium roof. */}
+        <ellipse cx="90" cy="22" rx="80" ry="28" fill="url(#floodlight)" />
+        <ellipse cx="310" cy="22" rx="80" ry="28" fill="url(#floodlight)" />
+        {/* Horizon line where the stand meets the grass. */}
+        <rect x="0" y="38" width={VIEW_W} height="3" fill="rgba(0,0,0,0.18)" />
+
+        {/* === PITCH MARKINGS ============================================== */}
+        {/* Diagonal stripes overlaid on the grass for that mowed feel. */}
+        <rect x="0" y="38" width={VIEW_W} height={VIEW_H - 38} fill="url(#grassStripes)" />
+        {/* Six-yard box (small inner rectangle around the goal). */}
+        <rect
+          x={PITCH.goalLeft - 28}
+          y={PITCH.goalBottom}
+          width={GOAL_WIDTH + 56}
+          height="32"
           fill="none"
-          stroke="var(--sp-surface)"
-          strokeWidth="1"
-          opacity="0.5"
+          stroke="rgba(255,255,255,0.65)"
+          strokeWidth="1.6"
+        />
+        {/* Penalty box (larger rectangle). */}
+        <rect
+          x={PITCH.goalLeft - 80}
+          y={PITCH.goalBottom}
+          width={GOAL_WIDTH + 160}
+          height="78"
+          fill="none"
+          stroke="rgba(255,255,255,0.55)"
+          strokeWidth="1.4"
+        />
+        {/* Penalty arc — the "D" at the front of the box. */}
+        <path
+          d={`M ${PITCH.ballX - 28} ${PITCH.ballY - 5} Q ${PITCH.ballX} ${PITCH.ballY - 22} ${PITCH.ballX + 28} ${PITCH.ballY - 5}`}
+          fill="none"
+          stroke="rgba(255,255,255,0.55)"
+          strokeWidth="1.4"
+        />
+        {/* Penalty spot — small painted disc the ball sits on. */}
+        <circle cx={PITCH.ballX} cy={PITCH.ballY + 4} r="2.2" fill="rgba(255,255,255,0.85)" />
+
+        {/* === GOAL FRAME ================================================== */}
+        {/* Three planes per upright + crossbar:
+         *   - back shadow rectangle (a touch darker / offset right)
+         *   - face gradient (catches the light)
+         *   - bottom-cap circle (sits on the ground; sells "tube" not "stick") */}
+        {/* Crossbar shadow under the bar onto the net. */}
+        <rect
+          x={PITCH.goalLeft - 4}
+          y={PITCH.goalTop + 5}
+          width={GOAL_WIDTH + 8}
+          height="3"
+          fill="rgba(0,0,0,0.18)"
+          filter="url(#softShadow)"
+        />
+
+        {/* Net fill (paint inside the goal mouth before the keeper / heat). */}
+        <rect
+          x={PITCH.goalLeft + 1}
+          y={PITCH.goalTop + 1}
+          width={GOAL_WIDTH - 2}
+          height={PITCH.goalBottom - PITCH.goalTop - 2}
+          fill="url(#goalNet)"
         />
 
         {/* Payout heat zones paint the goal interior with the heat ramp so
          * the big-payout regions are visible behind the keeper. Rendered first
-         * so the keeper silhouette overlays it: tall (dense) sections cover the
-         * red, short (thin) sections leave the green exposed. */}
+         * so the keeper silhouette overlays it. */}
         {consensus && consensus.points.length > 1 ? (
           <PayoutHeatZones
             points={consensus.points}
@@ -175,62 +293,20 @@ export function Pitch({
           />
         ) : null}
 
-        {/* Net hint */}
-        <g stroke="var(--sp-surface)" strokeWidth="0.6" opacity="0.55">
-          {Array.from({ length: 10 }, (_, i) => {
-            const x = PITCH.goalLeft + (GOAL_WIDTH / 10) * (i + 1);
-            return (
-              <line
-                key={`nv${i}`}
-                x1={x}
-                y1={PITCH.goalTop + 2}
-                x2={x}
-                y2={PITCH.goalBottom - 1}
-              />
-            );
-          })}
-          {Array.from({ length: 4 }, (_, i) => {
-            const y =
-              PITCH.goalTop + ((PITCH.goalBottom - PITCH.goalTop) / 5) * (i + 1);
-            return (
-              <line
-                key={`nh${i}`}
-                x1={PITCH.goalLeft + 1}
-                y1={y}
-                x2={PITCH.goalRight - 1}
-                y2={y}
-              />
-            );
-          })}
-        </g>
-
-        {/* Goal frame */}
-        <g
-          stroke="var(--sp-surface)"
-          strokeWidth="3.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          fill="none"
-        >
-          <line
-            x1={PITCH.goalLeft - 2}
-            y1={PITCH.goalTop}
-            x2={PITCH.goalRight + 2}
-            y2={PITCH.goalTop}
-          />
-          <line
-            x1={PITCH.goalLeft}
-            y1={PITCH.goalTop}
-            x2={PITCH.goalLeft}
-            y2={PITCH.goalBottom}
-          />
-          <line
-            x1={PITCH.goalRight}
-            y1={PITCH.goalTop}
-            x2={PITCH.goalRight}
-            y2={PITCH.goalBottom}
-          />
-        </g>
+        {/* === GOAL FRAME (continued) — drawn over the net + heat so the
+         *   posts look like they wrap in front of the mesh. */}
+        {/* Left upright */}
+        <rect x={PITCH.goalLeft - 3} y={PITCH.goalTop - 1} width="5" height={PITCH.goalBottom - PITCH.goalTop + 2} fill="url(#postFace)" />
+        <rect x={PITCH.goalLeft + 1.5} y={PITCH.goalTop - 1} width="1" height={PITCH.goalBottom - PITCH.goalTop + 2} fill="rgba(0,0,0,0.22)" />
+        {/* Right upright */}
+        <rect x={PITCH.goalRight - 2} y={PITCH.goalTop - 1} width="5" height={PITCH.goalBottom - PITCH.goalTop + 2} fill="url(#postFace)" />
+        <rect x={PITCH.goalRight + 1.5} y={PITCH.goalTop - 1} width="1" height={PITCH.goalBottom - PITCH.goalTop + 2} fill="rgba(0,0,0,0.22)" />
+        {/* Crossbar */}
+        <rect x={PITCH.goalLeft - 4} y={PITCH.goalTop - 3} width={GOAL_WIDTH + 8} height="5" fill="url(#crossbarFace)" />
+        <rect x={PITCH.goalLeft - 4} y={PITCH.goalTop + 1.5} width={GOAL_WIDTH + 8} height="1" fill="rgba(0,0,0,0.18)" />
+        {/* Base caps at the bottom of each post for grounded weight. */}
+        <ellipse cx={PITCH.goalLeft - 0.5} cy={PITCH.goalBottom + 1} rx="4.5" ry="2" fill="rgba(0,0,0,0.25)" />
+        <ellipse cx={PITCH.goalRight + 0.5} cy={PITCH.goalBottom + 1} rx="4.5" ry="2" fill="rgba(0,0,0,0.25)" />
 
         {/* Goal-line / outcome axis */}
         <line
@@ -238,7 +314,7 @@ export function Pitch({
           y1={PITCH.goalBottom}
           x2={PITCH.goalRight + 8}
           y2={PITCH.goalBottom}
-          stroke="var(--sp-surface)"
+          stroke="rgba(255,255,255,0.95)"
           strokeWidth="2.5"
           strokeLinecap="round"
         />
@@ -250,9 +326,12 @@ export function Pitch({
           textAnchor="middle"
           fontFamily="var(--sp-font-mono)"
           fontSize="11"
-          fontWeight="600"
-          fill="var(--sp-text)"
-          opacity="0.55"
+          fontWeight="700"
+          fill="#FFFFFF"
+          opacity="0.95"
+          style={{ paintOrder: 'stroke' }}
+          stroke="rgba(0,0,0,0.35)"
+          strokeWidth="2"
         >
           {fmt(lowerBound)}
         </text>
@@ -262,9 +341,12 @@ export function Pitch({
           textAnchor="middle"
           fontFamily="var(--sp-font-mono)"
           fontSize="11"
-          fontWeight="600"
-          fill="var(--sp-text)"
-          opacity="0.55"
+          fontWeight="700"
+          fill="#FFFFFF"
+          opacity="0.95"
+          style={{ paintOrder: 'stroke' }}
+          stroke="rgba(0,0,0,0.35)"
+          strokeWidth="2"
         >
           {fmt(upperBound)}
         </text>
@@ -281,34 +363,16 @@ export function Pitch({
             fontSize="9"
             fontWeight="700"
             letterSpacing="0.06em"
+            style={{ paintOrder: 'stroke' }}
+            stroke="rgba(0,0,0,0.4)"
+            strokeWidth="2.2"
           >
-            <tspan fill="#EF4444">RED</tspan>
-            <tspan fill="var(--sp-text-secondary)" fontWeight="500">{' = WHERE THE CROWD IS · '}</tspan>
-            <tspan fill="#22C55E">GREEN</tspan>
-            <tspan fill="var(--sp-text-secondary)" fontWeight="500">{' = BIGGER PAYOUT'}</tspan>
+            <tspan fill="#FF8B7A">RED</tspan>
+            <tspan fill="#FFFFFF" fontWeight="600">{' = WHERE THE CROWD IS · '}</tspan>
+            <tspan fill="#86F0B0">GREEN</tspan>
+            <tspan fill="#FFFFFF" fontWeight="600">{' = BIGGER PAYOUT'}</tspan>
           </text>
         ) : null}
-
-        {/* Ball trail — Score! Hero-style coral arc when the ball is in flight */}
-        <AnimatePresence>
-          {ballTarget && (
-            <motion.path
-              key="trail"
-              d={`M ${PITCH.ballX} ${PITCH.ballY} Q ${
-                (PITCH.ballX + aimToPixelX(ballTarget.x)) / 2
-              } ${PITCH.goalTop - 12} ${aimToPixelX(ballTarget.x)} ${PITCH.goalBottom}`}
-              fill="none"
-              stroke="var(--sp-accent)"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeDasharray="3 5"
-              initial={{ opacity: 0, pathLength: 0 }}
-              animate={{ opacity: 0.65, pathLength: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.4, ease: 'easeOut' }}
-            />
-          )}
-        </AnimatePresence>
 
         {/* Composed belief curve (your prediction) — sits above keeper, under frame */}
         {belief && belief.points.length > 1 ? (
@@ -319,9 +383,7 @@ export function Pitch({
           />
         ) : null}
 
-        {/* Past kick markers (from prior kicks this round). Point kicks render
-         *  as a single dot; range (sweep) kicks render as a bracketed band so
-         *  the user can read the shape at a glance. */}
+        {/* Past kick markers (from prior kicks this round). */}
         <KickMarkers
           kicks={kicks}
           lowerBound={lowerBound}
@@ -335,7 +397,7 @@ export function Pitch({
         {aim?.kind === 'locked' && (
           <g transform={`translate(${aimToPixelX(aim.x)}, ${PITCH.goalBottom})`}>
             <circle cx="0" cy="0" r="5" fill="var(--sp-accent)" />
-            <circle cx="0" cy="0" r="2" fill="var(--sp-surface)" />
+            <circle cx="0" cy="0" r="2" fill="#FFFFFF" />
           </g>
         )}
 
@@ -348,26 +410,14 @@ export function Pitch({
           />
         )}
 
-        {/* Ball; animated by framer-motion */}
-        <motion.g
-          animate={ballTargetPixel}
-          initial={false}
-          transition={
-            ballAtPenalty
-              ? { duration: 0 }
-              : { type: 'spring', stiffness: 180, damping: 18, mass: 0.6 }
-          }
-          onAnimationComplete={() => {
-            if (!ballAtPenalty) onBallSettled?.();
-          }}
-        >
-          <g transform={`translate(${PITCH.ballX}, ${PITCH.ballY})`}>
-            <ellipse cx="0" cy="12" rx="11" ry="2.8" fill="var(--sp-ball-shadow)" />
-            <circle cx="0" cy="0" r="11" fill="var(--sp-surface)" stroke="var(--sp-text)" strokeWidth="1.4" />
-            <polygon points="0,-5 4.8,-1.5 3,4 -3,4 -4.8,-1.5" fill="var(--sp-text)" />
-            <circle cx="0" cy="0" r="11" fill="url(#ballGloss)" />
-          </g>
-        </motion.g>
+        {/* Ball + flight. When ballTarget is set, kicks off the cinematic
+         *  per-shot-type animation. When null, the ball idles on the
+         *  penalty spot. */}
+        <BallFlight
+          target={ballTarget ?? null}
+          shotType={shotType}
+          onSettled={onBallSettled}
+        />
       </svg>
     </div>
   );
@@ -403,7 +453,7 @@ function AimDotLive({ phaseRef }: { phaseRef: MutableRefObject<number> }) {
         stroke="var(--sp-accent)"
         strokeWidth="1.5"
         strokeLinecap="round"
-        opacity="0.55"
+        opacity="0.65"
         strokeDasharray="3 4"
       />
       {/* Downward chevron sitting above the crossbar, pointing at the column. */}
@@ -417,13 +467,316 @@ function AimDotLive({ phaseRef }: { phaseRef: MutableRefObject<number> }) {
         <animate attributeName="r" values="12;19;12" dur="1.1s" repeatCount="indefinite" />
         <animate attributeName="opacity" values="0.4;0.08;0.4" dur="1.1s" repeatCount="indefinite" />
       </circle>
-      {/* Static inner halo for solid presence. */}
       <circle cx="0" cy="0" r="10" fill="var(--sp-accent)" opacity="0.45" />
-      {/* Larger, brighter core. */}
       <circle cx="0" cy="0" r="6.5" fill="var(--sp-accent)" />
-      <circle cx="0" cy="0" r="2.4" fill="var(--sp-surface)" />
+      <circle cx="0" cy="0" r="2.4" fill="#FFFFFF" />
     </g>
   );
+}
+
+/**
+ * Cinematic ball flight. Replaces framer-motion's spring on the ball group
+ * with a per-frame parametric path computation that lets us:
+ *
+ *   - vary the curve shape per shot type (strike = laser; curl = bend; chip
+ *     = high arc; sweep = floaty roll)
+ *   - vary the duration & easing per shot type
+ *   - drive the ball's rotation, the shadow scale, and the trail in lockstep
+ *     with the same `t` value, so everything stays physically coherent
+ *
+ * The ball lives in two coordinate systems: the parametric path is computed
+ * relative to its rest position at the penalty spot, then translated into
+ * viewBox coords by the group transform.
+ */
+interface BallFlightProps {
+  target: BallTarget | null;
+  shotType: ShotType;
+  onSettled?: () => void;
+}
+
+interface ShotProfile {
+  durationMs: number;
+  /** Easing curve mapping t ∈ [0, 1] → eased ∈ [0, 1]. */
+  ease: (t: number) => number;
+  /** Lateral curve shape: how much the ball "bends" sideways during flight,
+   *  in viewBox pixels. + or - swings the curve to one side. The argument is
+   *  the signed horizontal travel (negative = aimed left of start). */
+  bend: (signedHorizontal: number) => number;
+  /** Apex height of the parabolic arc in viewBox pixels above the straight-
+   *  line path. Higher = chip-shot feel, lower = laser. */
+  arcHeight: number;
+  /** Ball rotations during the flight. */
+  spinRevolutions: number;
+  /** Trail style for this shot. */
+  trail: 'tight' | 'curl' | 'lofted' | 'sweep';
+}
+
+// Tuned per-shot personality. Strike is short + flat + fast; chip is the
+// hang-time shot; curl bends hard and lands a touch later; sweep floats wide
+// and lazy. Durations are intentionally long (1.1-1.7s) for the cinematic feel.
+const SHOT_PROFILES: Record<ShotType, ShotProfile> = {
+  strike: {
+    durationMs: 1150,
+    // Strong ease-out: ball leaves the boot quickly and decelerates into net.
+    ease: (t) => 1 - Math.pow(1 - t, 2.2),
+    bend: () => 0,
+    arcHeight: 14,
+    spinRevolutions: 5,
+    trail: 'tight',
+  },
+  curl: {
+    durationMs: 1500,
+    // ease-in-out so the curl reads as a tracked arc — slow setup, peak
+    // bend mid-flight, snap into target.
+    ease: (t) => 0.5 - Math.cos(t * Math.PI) / 2,
+    // Bend is perpendicular to flight, sized to the travel. Sign comes from
+    // travel direction so a left-bound shot curls back rightward (and v/v).
+    bend: (sx) => (sx >= 0 ? 1 : -1) * 26,
+    arcHeight: 22,
+    spinRevolutions: 4,
+    trail: 'curl',
+  },
+  chip: {
+    durationMs: 1650,
+    // Linear-ish on the way up, slower coming down — gives the hang-time
+    // perception even though apex is geometric.
+    ease: (t) => t * t * (3 - 2 * t),
+    bend: () => 0,
+    arcHeight: 48,
+    spinRevolutions: 2.5,
+    trail: 'lofted',
+  },
+  sweep: {
+    durationMs: 1700,
+    // Slow and floaty: gentle ease-in-out matched with low arc and high spin
+    // so the ball looks like it's drifting on a long pass.
+    ease: (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2),
+    bend: (sx) => (sx >= 0 ? 1 : -1) * 14,
+    arcHeight: 18,
+    spinRevolutions: 6,
+    trail: 'sweep',
+  },
+};
+
+function BallFlight({ target, shotType, onSettled }: BallFlightProps) {
+  const groupRef = useRef<SVGGElement>(null);
+  const ballRef = useRef<SVGGElement>(null);
+  const shadowRef = useRef<SVGEllipseElement>(null);
+  const trailRef = useRef<SVGPathElement>(null);
+  const trailGhostsRef = useRef<SVGGElement>(null);
+  const settledOnceRef = useRef(false);
+
+  // Game.tsx rebuilds the `target` object on flying→landed even though the
+  // x value doesn't change — depending on it directly retriggered the
+  // animation. Key the effect on the numeric x instead.
+  const targetX = target?.x ?? null;
+
+  // Reset the ball to its rest position whenever the target goes back to null
+  // (i.e. between kicks). Without this, the group stays parked at the last
+  // landing position because we drive it imperatively below.
+  useEffect(() => {
+    if (targetX != null) return;
+    settledOnceRef.current = false;
+    const g = groupRef.current;
+    const ball = ballRef.current;
+    const shadow = shadowRef.current;
+    const trail = trailRef.current;
+    const ghosts = trailGhostsRef.current;
+    if (g) g.setAttribute('transform', `translate(${PITCH.ballX}, ${PITCH.ballY})`);
+    if (ball) ball.setAttribute('transform', 'rotate(0)');
+    if (shadow) {
+      shadow.setAttribute('rx', '11');
+      shadow.setAttribute('ry', '2.8');
+      shadow.setAttribute('opacity', '0.55');
+    }
+    if (trail) {
+      trail.setAttribute('d', '');
+      trail.setAttribute('opacity', '0');
+    }
+    if (ghosts) ghosts.innerHTML = '';
+  }, [targetX]);
+
+  // Flight animation: when target appears, animate via parametric path until
+  // we hit t = 1, then call onSettled exactly once.
+  useEffect(() => {
+    if (targetX == null) return;
+    settledOnceRef.current = false;
+
+    const profile = SHOT_PROFILES[shotType];
+    const startX = PITCH.ballX;
+    const startY = PITCH.ballY;
+    const endX = aimToPixelX(targetX);
+    const endY = PITCH.goalBottom;
+    const sx = endX - startX;
+    const sy = endY - startY;
+    const bendMag = profile.bend(sx);
+
+    // Direction-perpendicular unit vector for sideways curve offsets. The
+    // dominant axis here is vertical (up the screen), so we use the screen-x
+    // axis as the bend direction; this matches the player POV looking at the
+    // goal from behind the ball.
+    const bendDirX = 1; // simple horizontal bend; positive = right
+    const bendDirY = 0;
+
+    // For the visible trail, sample 24 points along the same parametric
+    // function we use to drive the ball. Render that polyline as a smooth
+    // dashed coral line that fades as the ball moves.
+    const trail = trailRef.current;
+    const ghosts = trailGhostsRef.current;
+    if (ghosts) ghosts.innerHTML = '';
+    if (trail) {
+      const samples = 28;
+      let d = '';
+      for (let i = 0; i <= samples; i++) {
+        const t = i / samples;
+        const eased = profile.ease(t);
+        const p = pathAt(eased, startX, startY, sx, sy, bendMag, bendDirX, bendDirY, profile.arcHeight);
+        d += `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(2)} ${p.y.toFixed(2)} `;
+      }
+      trail.setAttribute('d', d);
+      trail.setAttribute('opacity', '0.6');
+    }
+
+    let raf = 0;
+    const begin = performance.now();
+    const tick = (now: number) => {
+      const elapsed = now - begin;
+      const t = Math.min(1, elapsed / profile.durationMs);
+      const eased = profile.ease(t);
+      const p = pathAt(eased, startX, startY, sx, sy, bendMag, bendDirX, bendDirY, profile.arcHeight);
+
+      const g = groupRef.current;
+      if (g) g.setAttribute('transform', `translate(${p.x.toFixed(2)}, ${p.y.toFixed(2)})`);
+
+      // Spin the ball based on horizontal travel + a base spin rate. Per shot
+      // the spin amount varies so each shot reads with its own personality.
+      const ball = ballRef.current;
+      if (ball) {
+        const angle = profile.spinRevolutions * 360 * eased;
+        ball.setAttribute('transform', `rotate(${angle.toFixed(1)})`);
+      }
+
+      // Shadow tracks the projected ground point (i.e. where the ball *would*
+      // be if gravity took it straight down). Its scale shrinks with apex
+      // height to imply altitude. The shadow opacity fades for chip shots
+      // (longer hang time, less ground contact).
+      const shadow = shadowRef.current;
+      if (shadow) {
+        const heightAboveGround = startY + sy * eased - p.y;
+        const altitude = Math.max(0, heightAboveGround);
+        const scale = Math.max(0.35, 1 - altitude / 100);
+        shadow.setAttribute('rx', (11 * scale).toFixed(2));
+        shadow.setAttribute('ry', (2.8 * scale).toFixed(2));
+        shadow.setAttribute('opacity', (0.55 * scale).toFixed(2));
+      }
+
+      // Drop a fading ghost ball behind the live ball every few frames, for
+      // sweep/chip especially. Capped to a small pool so we don't pile up DOM.
+      if (ghosts && (profile.trail === 'sweep' || profile.trail === 'lofted')) {
+        const lastT = parseFloat(ghosts.dataset.lastT ?? '0');
+        if (eased - lastT >= 0.08) {
+          ghosts.dataset.lastT = String(eased);
+          const ghost = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+          ghost.setAttribute('cx', p.x.toFixed(2));
+          ghost.setAttribute('cy', p.y.toFixed(2));
+          ghost.setAttribute('r', '4');
+          ghost.setAttribute('fill', '#FFFFFF');
+          ghost.setAttribute('opacity', '0.4');
+          ghost.style.transition = 'opacity 600ms ease-out, r 600ms ease-out';
+          ghosts.appendChild(ghost);
+          requestAnimationFrame(() => {
+            ghost.setAttribute('opacity', '0');
+            ghost.setAttribute('r', '1.5');
+          });
+          // Reap after the transition ends so we don't leak nodes.
+          setTimeout(() => ghost.remove(), 700);
+        }
+      }
+
+      // Fade the static trail as the ball nears the goal so it doesn't
+      // linger on top of the kick marker after landing.
+      if (trail) {
+        const opacity = (1 - eased) * 0.55 + 0.1 * (1 - eased);
+        trail.setAttribute('opacity', opacity.toFixed(2));
+      }
+
+      if (t < 1) {
+        raf = requestAnimationFrame(tick);
+      } else if (!settledOnceRef.current) {
+        settledOnceRef.current = true;
+        if (trail) trail.setAttribute('opacity', '0');
+        onSettled?.();
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [targetX, shotType, onSettled]);
+
+  return (
+    <g>
+      {/* Static trail line drawn behind the ball during flight. */}
+      <path
+        ref={trailRef}
+        fill="none"
+        stroke="var(--sp-accent)"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeDasharray="3 5"
+        opacity="0"
+      />
+      {/* Ghost-ball pool for sweep/chip motion. */}
+      <g ref={trailGhostsRef} />
+
+      {/* The live ball. */}
+      <g ref={groupRef} transform={`translate(${PITCH.ballX}, ${PITCH.ballY})`}>
+        <ellipse
+          ref={shadowRef}
+          cx="0"
+          cy="14"
+          rx="11"
+          ry="2.8"
+          fill="rgba(0, 0, 0, 0.55)"
+          opacity="0.55"
+        />
+        <g ref={ballRef}>
+          <circle cx="0" cy="0" r="11" fill="url(#ballSphere)" stroke="#161616" strokeWidth="0.8" />
+          {/* Iconic black pentagons rotated with the ball. */}
+          <polygon points="0,-5 4.8,-1.5 3,4 -3,4 -4.8,-1.5" fill="#161616" />
+          <polygon points="-9,-1.5 -6.2,0.5 -7.4,3.4" fill="#161616" opacity="0.85" />
+          <polygon points="9,-1.5 6.2,0.5 7.4,3.4" fill="#161616" opacity="0.85" />
+          {/* Top-left specular highlight. */}
+          <circle cx="0" cy="0" r="11" fill="url(#ballGloss)" />
+        </g>
+      </g>
+    </g>
+  );
+}
+
+/** Parametric position at eased-t along the flight path. Encodes the parabolic
+ *  arc (lifted off the straight line) plus a perpendicular bend (curl). */
+function pathAt(
+  t: number,
+  sx0: number,
+  sy0: number,
+  dx: number,
+  dy: number,
+  bendMag: number,
+  bendDirX: number,
+  bendDirY: number,
+  arcHeight: number,
+): { x: number; y: number } {
+  // Straight-line interpolant.
+  const lx = sx0 + dx * t;
+  const ly = sy0 + dy * t;
+  // Sin-based arc lift (peaks at t = 0.5). Pulled negative because y grows
+  // downward in SVG.
+  const arc = Math.sin(t * Math.PI) * arcHeight;
+  // Bend perpendicular to straight-line direction, peaks at t = 0.5.
+  const bend = Math.sin(t * Math.PI) * bendMag;
+  return {
+    x: lx + bend * bendDirX,
+    y: ly - arc + bend * bendDirY,
+  };
 }
 
 /**
@@ -431,15 +784,7 @@ function AimDotLive({ phaseRef }: { phaseRef: MutableRefObject<number> }) {
  * quadratic bezier curves up the right edge of the pitch; the indicator
  * slides along the curve as the phase oscillates 0..1, and the green
  * sweet zone sits at the very top so the perfect release is the apex.
- *
- * The arc lives inside the same SVG as the pitch so it scales with the
- * canvas, and the indicator is animated by mutating its own group
- * transform every rAF tick (no React re-renders during the sweep).
  */
-// Compact arc that floats directly above the ball at the penalty spot,
-// horizontally centered on BALL_X so the meter reads like a release gauge
-// rising up out of the boot. Height ~55px keeps it out of the goal mouth
-// and out of the ball's flight path landing zone.
 const ARC = {
   p0: { x: 206, y: 202 },
   p1: { x: 188, y: 175 },
@@ -480,12 +825,8 @@ function TimingArc({
     return () => cancelAnimationFrame(raf);
   }, [phaseRef, locked]);
 
-  // Full track path
   const trackD = `M ${ARC.p0.x} ${ARC.p0.y} Q ${ARC.p1.x} ${ARC.p1.y} ${ARC.p2.x} ${ARC.p2.y}`;
 
-  // Sweet zone is the top slice of the bezier. Split the curve at
-  // tSplit = 1 - 2 * halfWidth using De Casteljau so the green segment
-  // is itself a quadratic bezier we can stroke.
   const tSplit = Math.max(0, 1 - sweetSpotHalfWidth * 2);
   const splitStart = arcPointAt(tSplit);
   const splitCtrl = {
@@ -498,55 +839,13 @@ function TimingArc({
 
   return (
     <g style={{ pointerEvents: 'none' }}>
-      {/* Soft drop shadow under the track */}
-      <path
-        d={trackD}
-        stroke="rgba(0, 0, 0, 0.22)"
-        strokeWidth="7"
-        strokeLinecap="round"
-        fill="none"
-        transform="translate(0.6, 1.4)"
-      />
-      {/* Track base */}
-      <path
-        d={trackD}
-        stroke="var(--sp-surface)"
-        strokeWidth="6"
-        strokeLinecap="round"
-        fill="none"
-        opacity="0.55"
-      />
-      {/* Track inner shading for a touch of depth */}
-      <path
-        d={trackD}
-        stroke="var(--sp-text)"
-        strokeWidth="3"
-        strokeLinecap="round"
-        fill="none"
-        opacity="0.14"
-      />
-      {/* Sweet-zone halo */}
-      <path
-        d={sweetD}
-        stroke="#22C55E"
-        strokeWidth="12"
-        strokeLinecap="round"
-        fill="none"
-        opacity="0.3"
-      />
-      {/* Sweet-zone core */}
-      <path
-        d={sweetD}
-        stroke="#22C55E"
-        strokeWidth="7"
-        strokeLinecap="round"
-        fill="none"
-        opacity="0.95"
-      />
-      {/* Tiny glint at the very top to mark the apex */}
-      <circle cx={ARC.p2.x} cy={ARC.p2.y} r="1.8" fill="var(--sp-surface)" opacity="0.9" />
+      <path d={trackD} stroke="rgba(0, 0, 0, 0.3)" strokeWidth="7" strokeLinecap="round" fill="none" transform="translate(0.6, 1.4)" />
+      <path d={trackD} stroke="#FFFFFF" strokeWidth="6" strokeLinecap="round" fill="none" opacity="0.7" />
+      <path d={trackD} stroke="var(--sp-text)" strokeWidth="3" strokeLinecap="round" fill="none" opacity="0.14" />
+      <path d={sweetD} stroke="#22C55E" strokeWidth="12" strokeLinecap="round" fill="none" opacity="0.3" />
+      <path d={sweetD} stroke="#22C55E" strokeWidth="7" strokeLinecap="round" fill="none" opacity="0.95" />
+      <circle cx={ARC.p2.x} cy={ARC.p2.y} r="1.8" fill="#FFFFFF" opacity="0.9" />
 
-      {/* Indicator: small puck that slides up the curve */}
       <g ref={indicatorRef} transform={`translate(${initial.x.toFixed(2)}, ${initial.y.toFixed(2)})`}>
         <circle cx="0" cy="0" r="5.5" fill="var(--sp-text)" opacity="0.22" />
         <circle
@@ -556,7 +855,7 @@ function TimingArc({
           fill={locked ? 'var(--sp-accent)' : 'var(--sp-text)'}
           style={{ transition: 'fill 0.18s var(--sp-ease)' }}
         />
-        <circle cx="0" cy="0" r="1.4" fill="var(--sp-surface)" />
+        <circle cx="0" cy="0" r="1.4" fill="#FFFFFF" />
       </g>
     </g>
   );
@@ -600,14 +899,6 @@ interface PayoutHeatZonesProps {
   upperBound: number;
 }
 
-/**
- * Heat ramp painted across the inside of the goal mouth. Each x position
- * gets a color from the heat ramp based on inverse crowd density:
- *   red (low payout / dense crowd) to amber to green (big payout).
- * The keeper silhouette renders on top, so tall (dense) regions cover the
- * red and short (thin) regions leave the green exposed. This double-encodes
- * the "thin crowd, bigger payout" pattern into both color and visible area.
- */
 function PayoutHeatZones({ points, lowerBound, upperBound }: PayoutHeatZonesProps) {
   const inRange = points.filter((p) => p.x >= lowerBound && p.x <= upperBound);
   if (inRange.length < 2) return null;
@@ -656,9 +947,6 @@ function PayoutHeatZones({ points, lowerBound, upperBound }: PayoutHeatZonesProp
             />
           ))}
         </linearGradient>
-        {/* Vertical falloff so the heat is densest at the back of the net
-         *  and fades toward the goal-line, where the keeper and aim markers
-         *  need clearer reads. */}
         <linearGradient id="payoutHeatFalloff" x1="0" x2="0" y1="0" y2="1">
           <stop offset="0%" stopColor="white" stopOpacity="0.95" />
           <stop offset="70%" stopColor="white" stopOpacity="0.75" />
@@ -687,12 +975,9 @@ function PayoutHeatZones({ points, lowerBound, upperBound }: PayoutHeatZonesProp
   );
 }
 
-// Heat → 3-stop color ramp: vivid red → warm amber → vivid green. Punched
-// brighter than the muted theme tokens so the cold end actually reads on the
-// pitch surface, and the hot end glows without leaning too far into yellow.
-const HEAT_COLD: [number, number, number] = [0xef, 0x44, 0x44]; // #EF4444 red-500
-const HEAT_WARM: [number, number, number] = [0xf9, 0x73, 0x16]; // #F97316 orange-500
-const HEAT_HOT: [number, number, number] = [0x22, 0xc5, 0x5e]; // #22C55E green-500
+const HEAT_COLD: [number, number, number] = [0xef, 0x44, 0x44];
+const HEAT_WARM: [number, number, number] = [0xf9, 0x73, 0x16];
+const HEAT_HOT: [number, number, number] = [0x22, 0xc5, 0x5e];
 
 function colorForHeat(heat: number): string {
   const mix = (a: [number, number, number], b: [number, number, number], t: number) => {
@@ -729,7 +1014,6 @@ function BeliefPath({ points, lowerBound, upperBound }: BeliefPathProps) {
 
   return (
     <g>
-      {/* Soft halo */}
       <path
         d={d}
         stroke="var(--sp-accent)"
@@ -739,7 +1023,6 @@ function BeliefPath({ points, lowerBound, upperBound }: BeliefPathProps) {
         fill="none"
         opacity="0.18"
       />
-      {/* Crisp line */}
       <path
         d={d}
         stroke="var(--sp-accent)"
@@ -760,12 +1043,6 @@ interface KickMarkersProps {
   units: string;
 }
 
-/**
- * Renders previously-landed kicks on the goal-line. Point kicks become
- * a small dot at the center; range kicks become a bracketed band so the
- * user can see the shape they chose. Hovering a marker shows a floating
- * tooltip with the exact outcome value(s).
- */
 function KickMarkers({
   kicks,
   lowerBound,
@@ -788,7 +1065,6 @@ function KickMarkers({
             : `${formatOutcome(k.low)}–${formatOutcome(k.high)}`;
           return (
             <g key={i}>
-              {/* Bracket band */}
               <line
                 x1={xLo}
                 y1={PITCH.goalBottom}
@@ -817,8 +1093,6 @@ function KickMarkers({
                 strokeWidth="2"
                 strokeLinecap="round"
               />
-              {/* Invisible wide hit target -- the rendered bracket itself
-                  is thin and easy to miss with the cursor. */}
               <rect
                 x={xLo - 6}
                 y={PITCH.goalBottom - 10}
@@ -836,8 +1110,6 @@ function KickMarkers({
           );
         }
 
-        // SplineRegion isn't produced by this app's kick engine, but the
-        // type union allows it -- bail out rather than guess a center.
         if (k.type !== 'point') return null;
 
         const px = outcomeToPixelX(k.center, lowerBound, upperBound);
@@ -866,8 +1138,6 @@ function KickMarkers({
 }
 
 function KickTooltip({ x, y, label }: { x: number; y: number; label: string }) {
-  // Approximate text width to size the bubble. 6.2px per char at the
-  // chosen 10px mono font roughly matches Geist Mono's advance width.
   const padX = 6;
   const padY = 4;
   const w = Math.max(40, label.length * 6.2 + padX * 2);
@@ -883,7 +1153,6 @@ function KickTooltip({ x, y, label }: { x: number; y: number; label: string }) {
         fill="var(--sp-text)"
         opacity="0.92"
       />
-      {/* Tail under the bubble */}
       <polygon
         points={`-4,${-2} 4,${-2} 0,${4}`}
         fill="var(--sp-text)"
@@ -903,3 +1172,4 @@ function KickTooltip({ x, y, label }: { x: number; y: number; label: string }) {
     </g>
   );
 }
+
