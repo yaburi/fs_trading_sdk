@@ -43,14 +43,14 @@ const STEPS = [
     overline: 'Step 2',
     title: 'Aim, time, kick',
     body:
-      "Lock the aim where you want to score. Time the kick inside the sweet spot for conviction. Wind adds character; the worse your timing, the more it nudges you.",
+      "Lock the aim where you want to score. Time the kick inside the sweet spot for conviction. Miss the sweet spot and your kick sprays wider.",
     badge: { bg: '#FFEDD5', fg: '#EA580C', glyph: glyphAim },
   },
   {
     overline: 'Step 3',
-    title: 'Stack kicks for a richer call',
+    title: 'Go against the crowd',
     body:
-      "Take up to 5 kicks. Each one adds a region to your belief. The goalkeeper is the crowd: it covers where most people think the outcome will land. Aim where it's faded for a bigger potential payout.",
+      "Take up to 5 kicks. Each one adds to your prediction. The crowded zones pay less because everyone is there. Aim where the crowd isn't for a bigger payout when you're right.",
     badge: { bg: '#FCE7F3', fg: '#DB2777', glyph: glyphStack },
   },
 ];

@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
-import type { PointRegion } from '@functionspace/core';
+import type { Region } from '@functionspace/core';
 
 /**
  * Round state — held above the routes so Stake / Game / Confirm share
@@ -14,14 +14,14 @@ const DEFAULT_STAKE = 10;
 interface RoundState {
   marketId: string | null;
   stake: number;
-  kicks: PointRegion[];
+  kicks: Region[];
 }
 
 interface RoundContextValue extends RoundState {
   /** Set the active market and reset round state (clear kicks, set default stake). */
   startRound: (marketId: string, defaultStake?: number) => void;
   setStake: (stake: number) => void;
-  addKick: (region: PointRegion) => void;
+  addKick: (region: Region) => void;
   resetKicks: () => void;
   clear: () => void;
   /** Convenience: how many more kicks are allowed. */
@@ -33,7 +33,7 @@ const RoundContext = createContext<RoundContextValue | null>(null);
 export function RoundProvider({ children }: { children: ReactNode }) {
   const [marketId, setMarketId] = useState<string | null>(null);
   const [stake, setStakeState] = useState<number>(DEFAULT_STAKE);
-  const [kicks, setKicks] = useState<PointRegion[]>([]);
+  const [kicks, setKicks] = useState<Region[]>([]);
 
   const startRound = useCallback((id: string, defaultStake: number = DEFAULT_STAKE) => {
     setMarketId((prev) => {
@@ -50,7 +50,7 @@ export function RoundProvider({ children }: { children: ReactNode }) {
     setStakeState(Math.max(1, Math.round(next * 100) / 100));
   }, []);
 
-  const addKick = useCallback((region: PointRegion) => {
+  const addKick = useCallback((region: Region) => {
     setKicks((prev) => (prev.length >= MAX_KICKS ? prev : [...prev, region]));
   }, []);
 

@@ -8,9 +8,9 @@ import { Card } from '../components/Card';
 import { Pill } from '../components/Pill';
 import { MarketIcon } from '../components/MarketIcon';
 import { AuthSheet } from '../components/AuthSheet';
+import { MarketPickerModal } from '../components/MarketPickerModal';
 import { Pitch } from '../game/Pitch';
-import { useKickEngine } from '../game/useKickEngine';
-import { WindChip } from '../game/WindChip';
+import { useKickEngine, type ShotType } from '../game/useKickEngine';
 import { useComposedBelief } from '../game/useComposedBelief';
 import { useRound, ROUND_CONSTANTS } from '../state/RoundContext';
 
@@ -20,12 +20,22 @@ export default function Game() {
   const { market } = useMarket(marketId ?? '');
   const { consensus } = useConsensus(marketId ?? '', 80);
   const round = useRound();
-  const engine = useKickEngine(market);
+  const [shotType, setShotType] = useState<ShotType>('strike');
+  const engine = useKickEngine(market, shotType);
   const composed = useComposedBelief(market, round.kicks, 80);
   const kicksRemaining = ROUND_CONSTANTS.MAX_KICKS - round.kicks.length;
   const { isAuthenticated } = useAuth();
   const [authOpen, setAuthOpen] = useState(false);
   const [pendingSubmit, setPendingSubmit] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  // Ensure the round context is bound to the URL's marketId. This handles
+  // direct links and the in-Game "Change market" flow which navigates
+  // straight here without going through Stake.
+  useEffect(() => {
+    if (marketId) round.startRound(marketId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [marketId]);
 
   // After guest taps Submit, sign-in success advances them to /confirm.
   useEffect(() => {
@@ -99,7 +109,6 @@ export default function Game() {
     return null;
   }, [engine.state, engine.landingX]);
 
-  const showWindChip = engine.state !== 'ready' || round.kicks.length > 0;
   const showTiming = engine.state === 'timing' || engine.state === 'flying';
 
   // Curved shot-meter overlay. Visible while picking timing (and frozen during
@@ -221,6 +230,14 @@ export default function Game() {
       header={<Header onBack={() => navigate(-1)} centerLabel="Free kick" />}
       footer={
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {/* Shot-type chooser. Default 'strike' matches the original kick;
+           *  the others reshape the committed region without changing the
+           *  aim/time flow. Disabled while a kick is in flight. */}
+          <ShotTypeChips
+            value={shotType}
+            onChange={setShotType}
+            disabled={engine.state !== 'ready'}
+          />
 
           <div style={{ display: 'flex', gap: '8px' }}>
             <Pill
@@ -259,7 +276,10 @@ export default function Game() {
         </div>
       }
     >
-      {/* Market + stake + wind strip */}
+      {/* Market header: title + range + crowd expects + change market.
+       *  Stake is no longer shown here -- it's surfaced in the bet summary
+       *  card below and on the Confirm screen, where the user can actually
+       *  act on it. */}
       <Card padding="md">
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           {market && <MarketIcon market={market} size={36} />}
@@ -277,48 +297,96 @@ export default function Game() {
             >
               {market?.title ?? 'Loading…'}
             </div>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                marginTop: '4px',
-                fontSize: '11px',
-                color: 'var(--sp-text-secondary)',
-              }}
-            >
-              <span className="sp-mono">${round.stake.toFixed(round.stake % 1 === 0 ? 0 : 2)}</span>
-              <span>·</span>
-              <KickDots taken={round.kicks.length} total={ROUND_CONSTANTS.MAX_KICKS} />
-            </div>
+            {market && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  marginTop: '4px',
+                  fontSize: '11px',
+                  color: 'var(--sp-text-secondary)',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <span>
+                  <span className="sp-uppercase" style={{ marginRight: '4px' }}>
+                    Range
+                  </span>
+                  <span className="sp-mono" style={{ color: 'var(--sp-text)' }}>
+                    {formatBound(market.config.lowerBound, market.decimals ?? 0)}
+                    {'–'}
+                    {formatBound(market.config.upperBound, market.decimals ?? 0)}
+                  </span>
+                  {market.xAxisUnits ? ` ${market.xAxisUnits}` : ''}
+                </span>
+                <span>·</span>
+                <span>
+                  <span className="sp-uppercase" style={{ marginRight: '4px' }}>
+                    Crowd expects
+                  </span>
+                  <span className="sp-mono" style={{ color: 'var(--sp-text)' }}>
+                    {formatBound(market.consensusMean, market.decimals ?? 0)}
+                  </span>
+                  {market.xAxisUnits ? ` ${market.xAxisUnits}` : ''}
+                </span>
+              </div>
+            )}
           </div>
-          {showWindChip && <WindChip wind={engine.wind} muted={engine.state === 'ready'} />}
+          <button
+            onClick={() => setPickerOpen(true)}
+            aria-label="Change market"
+            style={{
+              flexShrink: 0,
+              padding: '6px 10px',
+              borderRadius: '999px',
+              background: 'var(--sp-surface-2)',
+              border: '1px solid var(--sp-border)',
+              color: 'var(--sp-text)',
+              fontSize: '11px',
+              fontWeight: 600,
+              fontFamily: 'var(--sp-font-body)',
+            }}
+          >
+            Change
+          </button>
         </div>
       </Card>
 
-      {/* Game canvas */}
-      <Card padding="none" tone="inset" radius="md" style={{ overflow: 'hidden' }}>
-        {market ? (
-          <Pitch
-            market={market}
-            consensus={consensus}
-            aim={aim}
-            kicks={round.kicks}
-            belief={composed?.curve ?? null}
-            ballTarget={ballTarget}
-            onBallSettled={engine.onLanded}
-            timing={timing}
-          />
-        ) : (
-          <div
-            style={{
-              width: '100%',
-              aspectRatio: '4 / 3',
-              background: 'var(--sp-surface-2)',
-            }}
+      {/* Game canvas with kicks-remaining badge overlay */}
+      <div style={{ position: 'relative' }}>
+        <Card padding="none" tone="inset" radius="md" style={{ overflow: 'hidden' }}>
+          {market ? (
+            <Pitch
+              market={market}
+              consensus={consensus}
+              aim={aim}
+              kicks={round.kicks}
+              belief={composed?.curve ?? null}
+              ballTarget={ballTarget}
+              onBallSettled={engine.onLanded}
+              timing={timing}
+            />
+          ) : (
+            <div
+              style={{
+                width: '100%',
+                aspectRatio: '4 / 3',
+                background: 'var(--sp-surface-2)',
+              }}
+            />
+          )}
+        </Card>
+        {/* Kicks-remaining badge sits below the ball, anchored to the
+         *  bottom of the canvas. Hidden until the market loads so it
+         *  doesn't flash over the skeleton. */}
+        {market && (
+          <KicksRemainingBadge
+            taken={round.kicks.length}
+            total={ROUND_CONSTANTS.MAX_KICKS}
           />
         )}
-      </Card>
+      </div>
 
       {/* Phase status / instruction line */}
       <div
@@ -334,6 +402,7 @@ export default function Game() {
         <PhaseHint
           state={engine.state}
           kicksTaken={round.kicks.length}
+          shotType={shotType}
           aimOutcome={
             engine.aimX != null && market
               ? formatOutcome(
@@ -464,7 +533,53 @@ export default function Game() {
           setPendingSubmit(false);
         }}
       />
+
+      <MarketPickerModal
+        open={pickerOpen}
+        activeMarketId={market?.marketId ?? null}
+        onClose={() => setPickerOpen(false)}
+        onSelect={(m) => {
+          setPickerOpen(false);
+          if (m.marketId === market?.marketId) return;
+          navigate(`/m/${m.marketId}/play`);
+        }}
+      />
     </PageShell>
+  );
+}
+
+/** Small absolutely-positioned badge that sits at the bottom of the
+ *  game canvas (below the ball area). Shows how many kicks the user
+ *  has left in the round. */
+function KicksRemainingBadge({ taken, total }: { taken: number; total: number }) {
+  const remaining = Math.max(0, total - taken);
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: '50%',
+        bottom: '10px',
+        transform: 'translateX(-50%)',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '8px',
+        padding: '4px 10px',
+        borderRadius: '999px',
+        background: 'var(--sp-glass-footer)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+        border: '1px solid var(--sp-border-subtle)',
+        fontSize: '11px',
+        color: 'var(--sp-text-secondary)',
+        pointerEvents: 'none',
+      }}
+    >
+      <KickDots taken={taken} total={total} />
+      <span className="sp-mono" style={{ color: 'var(--sp-text)', fontWeight: 600 }}>
+        {remaining}
+      </span>
+      <span>left</span>
+    </div>
   );
 }
 
@@ -487,6 +602,191 @@ function KickDots({ taken, total }: { taken: number; total: number }) {
   );
 }
 
+interface ShotChipDef {
+  id: ShotType;
+  label: string;
+  /** Short, plain-language description shown in the preview panel. */
+  description: string;
+}
+
+const SHOT_CHIPS: ShotChipDef[] = [
+  {
+    id: 'strike',
+    label: 'Strike',
+    description: 'Tight, accurate. Backs one outcome strongly.',
+  },
+  {
+    id: 'curl',
+    label: 'Curl',
+    description: 'Bends toward the side you aim at. Slightly off-center belief.',
+  },
+  {
+    id: 'chip',
+    label: 'Chip',
+    description: 'Lofted and wider. Hedges around your aim.',
+  },
+  {
+    id: 'sweep',
+    label: 'Sweep',
+    description: 'Covers a whole band of outcomes around your aim.',
+  },
+];
+
+function ShotTypeChips({
+  value,
+  onChange,
+  disabled = false,
+}: {
+  value: ShotType;
+  onChange: (s: ShotType) => void;
+  disabled?: boolean;
+}) {
+  const active = SHOT_CHIPS.find((c) => c.id === value) ?? SHOT_CHIPS[0];
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '6px',
+        opacity: disabled ? 0.55 : 1,
+        transition: 'opacity 0.18s var(--sp-ease)',
+      }}
+    >
+      <div
+        role="tablist"
+        aria-label="Shot type"
+        style={{
+          display: 'flex',
+          gap: '6px',
+          overflowX: 'auto',
+          paddingBottom: '2px',
+        }}
+      >
+        {SHOT_CHIPS.map((chip) => {
+          const isActive = chip.id === value;
+          return (
+            <button
+              key={chip.id}
+              role="tab"
+              aria-selected={isActive}
+              disabled={disabled}
+              onClick={() => onChange(chip.id)}
+              style={{
+                flex: '0 0 auto',
+                padding: '6px 12px',
+                borderRadius: '999px',
+                background: isActive ? 'var(--sp-primary)' : 'var(--sp-surface)',
+                color: isActive ? 'var(--sp-on-primary)' : 'var(--sp-text-secondary)',
+                border: isActive ? 'none' : '1px solid var(--sp-border)',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: disabled ? 'not-allowed' : 'pointer',
+                transition: 'background 0.18s var(--sp-ease), color 0.18s var(--sp-ease)',
+              }}
+            >
+              {chip.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Live preview panel: tiny shape sketch + one-line description
+       *  for the currently selected shot type. Always visible so the
+       *  user can browse types and see what they'd produce before
+       *  committing to a kick. */}
+      <div
+        aria-live="polite"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          padding: '8px 10px',
+          borderRadius: 'var(--sp-radius-sm)',
+          background: 'var(--sp-surface-2)',
+          border: '1px solid var(--sp-border-subtle)',
+        }}
+      >
+        <ShotShapePreview type={active.id} />
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div
+            className="sp-uppercase sp-secondary"
+            style={{ marginBottom: '1px', fontSize: '10px' }}
+          >
+            {active.label} shape
+          </div>
+          <div
+            style={{
+              fontSize: '12px',
+              lineHeight: 1.35,
+              color: 'var(--sp-text)',
+            }}
+          >
+            {active.description}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Tiny SVG sketch of the belief shape each shot type produces. Purely
+ *  illustrative -- the goal is to communicate "narrow peak" vs "wide hump"
+ *  vs "skewed" vs "flat band" at a glance, not to be mathematically exact. */
+function ShotShapePreview({ type }: { type: ShotType }) {
+  const W = 56;
+  const H = 28;
+  // Baseline + path per shot type. All paths sit on y = H (the baseline)
+  // and peak/extend upward.
+  let d = '';
+  if (type === 'strike') {
+    // Narrow Gaussian-ish peak in the middle.
+    d = `M 4 ${H} Q ${W / 2} ${H - 4} ${W / 2 - 6} ${H - 22} Q ${W / 2} ${H - 30} ${W / 2 + 6} ${H - 22} Q ${W / 2} ${H - 4} ${W - 4} ${H}`;
+  } else if (type === 'curl') {
+    // Skewed bump: peak shifted right, longer left tail.
+    d = `M 4 ${H} Q 12 ${H - 4} 24 ${H - 12} Q 32 ${H - 24} 38 ${H - 22} Q 44 ${H - 18} 52 ${H} Z`;
+  } else if (type === 'chip') {
+    // Wide, lower hump.
+    d = `M 4 ${H} Q 14 ${H - 6} 22 ${H - 16} Q ${W / 2} ${H - 22} 34 ${H - 16} Q 42 ${H - 6} ${W - 4} ${H}`;
+  } else {
+    // Sweep: flat-topped trapezoid band.
+    d = `M 6 ${H} L 14 ${H - 14} L 42 ${H - 14} L 50 ${H} Z`;
+  }
+  return (
+    <svg
+      width={W}
+      height={H}
+      viewBox={`0 0 ${W} ${H}`}
+      aria-hidden
+      style={{ flexShrink: 0, display: 'block' }}
+    >
+      {/* Baseline (goal-line analogue) */}
+      <line
+        x1="2"
+        y1={H - 0.5}
+        x2={W - 2}
+        y2={H - 0.5}
+        stroke="var(--sp-border)"
+        strokeWidth="1"
+      />
+      {/* Soft halo */}
+      <path
+        d={d}
+        fill="var(--sp-accent)"
+        opacity="0.18"
+      />
+      {/* Crisp outline */}
+      <path
+        d={d}
+        fill="none"
+        stroke="var(--sp-accent)"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 // Compact dollar formatting. Drop cents when the figure is large enough that
 // cents are noise; keep two decimals at the low end so a wide-bet "$5.10"
 // still reads as $5.10 (not $5).
@@ -494,6 +794,13 @@ function formatPayout(value: number): string {
   if (value >= 100) return value.toFixed(0);
   if (value >= 10) return value.toFixed(1);
   return value.toFixed(2);
+}
+
+function formatBound(value: number, decimals: number): string {
+  return value.toLocaleString(undefined, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
 }
 
 function SummaryCell({
@@ -531,10 +838,12 @@ function formatOutcome(value: number, decimals: number, units: string): string {
 function PhaseHint({
   state,
   kicksTaken,
+  shotType,
   aimOutcome,
 }: {
   state: ReturnType<typeof useKickEngine>['state'];
   kicksTaken: number;
+  shotType: ShotType;
   aimOutcome: string | null;
 }) {
   const baseStyle = { fontSize: '13px', color: 'var(--sp-text-secondary)' };
@@ -544,7 +853,7 @@ function PhaseHint({
         {kicksTaken === 0
           ? 'Step up. Tap Kick when you\'re ready.'
           : kicksTaken < ROUND_CONSTANTS.MAX_KICKS
-            ? 'Take another kick or submit your belief.'
+            ? 'Take another kick or submit your prediction.'
             : 'Max kicks taken. Submit when ready.'}
       </span>
     );
@@ -555,9 +864,23 @@ function PhaseHint({
   if (state === 'timing') {
     return (
       <span style={baseStyle}>
-        Tap Lock when the meter reaches the green zone at the top.
+        Tap Lock at the very top of the arc. Miss it and your {shotTypeNoun(shotType)} sprays wider.
+        {aimOutcome ? <> Aiming at <span className="sp-mono">{aimOutcome}</span>.</> : null}
       </span>
     );
   }
   return null;
+}
+
+function shotTypeNoun(t: ShotType): string {
+  switch (t) {
+    case 'curl':
+      return 'curl';
+    case 'chip':
+      return 'chip';
+    case 'sweep':
+      return 'sweep';
+    default:
+      return 'strike';
+  }
 }

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMarkets } from '@functionspace/react';
 import { PageShell } from '../components/PageShell';
@@ -6,10 +7,17 @@ import { Card } from '../components/Card';
 import { MarketRow } from '../components/MarketRow';
 import { IntroSheet } from '../components/IntroSheet';
 
+type ScopeId = 'wc' | 'all';
+
 export default function MarketList() {
   const navigate = useNavigate();
+  // Default to the World Cup slice but let the user widen the list to
+  // every open market. Stored as local state so toggling is instant; no
+  // need to persist across navigations -- defaulting back to World Cup on
+  // re-entry matches the marketed positioning of the app.
+  const [scope, setScope] = useState<ScopeId>('wc');
   const { markets, loading, error, refetch } = useMarkets({
-    categories: ['World Cup'],
+    categories: scope === 'wc' ? ['World Cup'] : undefined,
     state: 'open',
     sortBy: 'totalVolume',
     sortOrder: 'desc',
@@ -40,7 +48,7 @@ export default function MarketList() {
             lineHeight: 1.5,
           }}
         >
-          Pick a market. Aim, time, kick. Each kick shapes your prediction. The goalkeeper is the crowd: where most people think it'll land.
+          Pick a market. Aim, time, kick. Each kick shapes your prediction. Going against the crowd pays more when you're right.
         </p>
       </div>
 
@@ -74,13 +82,19 @@ export default function MarketList() {
         </Card>
       )}
 
+      {!loading && !error && (
+        <ScopeToggle value={scope} onChange={setScope} />
+      )}
+
       {!loading && !error && markets.length === 0 && (
         <Card>
           <div className="sp-display-md" style={{ fontSize: '18px', marginBottom: '4px' }}>
-            No World Cup markets right now
+            {scope === 'wc' ? 'No World Cup markets right now' : 'No open markets right now'}
           </div>
           <div className="sp-secondary" style={{ fontSize: '14px' }}>
-            Check back closer to kickoff.
+            {scope === 'wc'
+              ? 'Try All markets, or check back closer to kickoff.'
+              : 'Check back soon.'}
           </div>
         </Card>
       )}
@@ -105,6 +119,57 @@ export default function MarketList() {
         </>
       )}
     </PageShell>
+  );
+}
+
+function ScopeToggle({
+  value,
+  onChange,
+}: {
+  value: ScopeId;
+  onChange: (v: ScopeId) => void;
+}) {
+  const tabs: { id: ScopeId; label: string }[] = [
+    { id: 'wc', label: 'World Cup' },
+    { id: 'all', label: 'All markets' },
+  ];
+  return (
+    <div
+      role="tablist"
+      aria-label="Market scope"
+      style={{
+        display: 'inline-flex',
+        padding: '4px',
+        borderRadius: '999px',
+        background: 'var(--sp-surface)',
+        border: '1px solid var(--sp-border)',
+        alignSelf: 'flex-start',
+        gap: '2px',
+      }}
+    >
+      {tabs.map((t) => {
+        const active = t.id === value;
+        return (
+          <button
+            key={t.id}
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(t.id)}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '999px',
+              background: active ? 'var(--sp-primary)' : 'transparent',
+              color: active ? 'var(--sp-on-primary)' : 'var(--sp-text-secondary)',
+              fontSize: '12px',
+              fontWeight: 600,
+              transition: 'background 0.18s var(--sp-ease), color 0.18s var(--sp-ease)',
+            }}
+          >
+            {t.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

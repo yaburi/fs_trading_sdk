@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react';
-import type { MarketState, PointRegion } from '@functionspace/core';
+import type { MarketState, Region } from '@functionspace/core';
 
 /**
  * Kick state machine.
@@ -13,7 +13,7 @@ import type { MarketState, PointRegion } from '@functionspace/core';
  * - flying: ball animates from penalty spot to landing position. Caller
  *   signals `onLanded()` when the animation completes.
  * - landed: kick is captured. Caller can call `commit()` to push a
- *   PointRegion to the round and reset to ready.
+ *   Region to the round and reset to ready.
  *
  * The aiming and timing phases are exposed as mutable refs (not state)
  * so the 60fps oscillation never triggers a React re-render. View
@@ -23,22 +23,52 @@ import type { MarketState, PointRegion } from '@functionspace/core';
 
 export type KickState = 'ready' | 'aiming' | 'timing' | 'flying' | 'landed';
 
-export interface Wind {
-  dir: number;
-  speed: number;
-}
+/**
+ * Shot type chosen before the kick. Default 'strike' preserves the
+ * original single-point behavior; the others reshape the committed
+ * Region without changing the aim/time mechanic.
+ *
+ *  - strike: narrow PointRegion (default)
+ *  - curl:   PointRegion with skew; sign derived from which half of the
+ *            goal the user aimed at (left half = negative skew)
+ *  - chip:   PointRegion with wider spread
+ *  - sweep:  RangeRegion (band) centered on the aim
+ */
+export type ShotType = 'strike' | 'curl' | 'chip' | 'sweep';
 
-const AIM_PERIOD_MS = 1400;
-const TIMING_PERIOD_MS = 1100;
+const AIM_PERIOD_MS = 1100;
+// Faster oscillation than aim so the meter genuinely punishes a slow tap.
+const TIMING_PERIOD_MS = 750;
 // Sweet spot anchored to the top of the oscillation (phase = 1.0) so the
 // indicator must reach the apex of the timing arc, NBA 2K shot-meter style.
 const SWEET_SPOT_CENTER = 1.0;
-const SWEET_SPOT_HALF_WIDTH = 0.1;
+// Narrower than before -- previous 0.10 was too forgiving and most kicks
+// hit perfect. 0.06 still feels reachable but rewards deliberate timing.
+const SWEET_SPOT_HALF_WIDTH = 0.06;
 
+// Spread tunables (no wind). Missing the sweet spot now meaningfully widens
+// the kick: a fully whiffed kick can spray across ~30% of the range.
 const BASE_SPREAD_PCT = 0.04;
-const WORST_SPREAD_ADD = 0.18;
-const WIND_SPREAD_ADD = 0.08;
-const JITTER_PCT = 0.06;
+const WORST_SPREAD_ADD = 0.28;
+
+// Power falloff. Inside the sweet spot the power dips only slightly with
+// distance from center; outside, it falls off fast so a near-miss is
+// clearly worse than a perfect tap and a hard miss bottoms out near zero.
+const SWEET_INTERIOR_DROP = 0.1;     // perfect = 1.0, edge of sweet zone = 0.9
+const OUTSIDE_BASE = 0.6;             // power just outside sweet zone
+const OUTSIDE_FALLOFF = 2.4;          // steeper than before (was 1.6)
+
+// Shot-type spread multipliers. Applied on top of the timing-derived
+// spread so timing still matters within each shot type.
+const SHOT_SPREAD_MULT: Record<ShotType, number> = {
+  strike: 1,
+  curl: 1,
+  chip: 2.2,
+  sweep: 1,
+};
+
+// Range half-width for sweep, as a fraction of the outcome range.
+const SWEEP_HALF_WIDTH_PCT = 0.12;
 
 export interface KickEngine {
   state: KickState;
@@ -46,36 +76,34 @@ export interface KickEngine {
   timingPhaseRef: MutableRefObject<number>;
   aimX: number | null;
   power: number;
-  wind: Wind;
   landingX: number | null;
   sweetSpot: { center: number; halfWidth: number };
   primaryLabel: string;
   startKick: () => void;
   primaryAction: () => void;
   onLanded: () => void;
-  commit: () => PointRegion | null;
+  commit: () => Region | null;
   reset: () => void;
-}
-
-function randomWind(): Wind {
-  const dirSign = Math.random() < 0.5 ? -1 : 1;
-  const dirMag = 0.3 + Math.random() * 0.7;
-  return { dir: dirSign * dirMag, speed: 0.15 + Math.random() * 0.7 };
 }
 
 function clamp01(n: number) {
   return Math.max(0, Math.min(1, n));
 }
 
-export function useKickEngine(market: MarketState | null): KickEngine {
+export function useKickEngine(
+  market: MarketState | null,
+  shotType: ShotType = 'strike',
+): KickEngine {
   const [state, setState] = useState<KickState>('ready');
   const [aimX, setAimX] = useState<number | null>(null);
   const [power, setPower] = useState(1);
-  const [wind, setWind] = useState<Wind>({ dir: 0, speed: 0 });
   const [landingX, setLandingX] = useState<number | null>(null);
 
   const aimPhaseRef = useRef(0);
   const timingPhaseRef = useRef(0);
+  // Capture the shot type at the moment of kick so changing the selector
+  // mid-kick can't desync the committed region.
+  const shotTypeRef = useRef<ShotType>(shotType);
 
   // Drive the oscillating phase via rAF without touching React state. View
   // components reading these refs run their own rAF loop and mutate DOM.
@@ -106,14 +134,14 @@ export function useKickEngine(market: MarketState | null): KickEngine {
   }, [state]);
 
   const startKick = useCallback(() => {
-    setWind(randomWind());
     setAimX(null);
     setPower(1);
     setLandingX(null);
     aimPhaseRef.current = 0;
     timingPhaseRef.current = 0;
+    shotTypeRef.current = shotType;
     setState('aiming');
-  }, []);
+  }, [shotType]);
 
   const lockAim = useCallback(() => {
     const x = clamp01(aimPhaseRef.current);
@@ -126,34 +154,55 @@ export function useKickEngine(market: MarketState | null): KickEngine {
     const dist = Math.abs(phase - SWEET_SPOT_CENTER);
     const inSweet = dist <= SWEET_SPOT_HALF_WIDTH;
     const p = inSweet
-      ? 1 - (dist / SWEET_SPOT_HALF_WIDTH) * 0.15
-      : Math.max(0, 0.7 - (dist - SWEET_SPOT_HALF_WIDTH) * 1.6);
+      ? 1 - (dist / SWEET_SPOT_HALF_WIDTH) * SWEET_INTERIOR_DROP
+      : Math.max(0, OUTSIDE_BASE - (dist - SWEET_SPOT_HALF_WIDTH) * OUTSIDE_FALLOFF);
     setPower(p);
 
+    // Landing equals the locked aim -- no jitter now that wind is gone.
     const ax = aimX ?? 0.5;
-    const jitter = wind.dir * (1 - p) * JITTER_PCT;
-    setLandingX(clamp01(ax + jitter));
+    setLandingX(clamp01(ax));
     setState('flying');
-  }, [aimX, wind]);
+  }, [aimX]);
 
   const onLanded = useCallback(() => {
     setState('landed');
   }, []);
 
-  const commit = useCallback((): PointRegion | null => {
+  const commit = useCallback((): Region | null => {
     if (!market || landingX == null) return null;
     const { lowerBound, upperBound } = market.config;
     const range = upperBound - lowerBound;
     const center = lowerBound + landingX * range;
-    const spreadPct =
-      BASE_SPREAD_PCT + (1 - power) * WORST_SPREAD_ADD + wind.speed * WIND_SPREAD_ADD;
-    const spread = Math.max(range * 0.02, spreadPct * range);
+    const type = shotTypeRef.current;
+
+    const spreadPct = BASE_SPREAD_PCT + (1 - power) * WORST_SPREAD_ADD;
+    const baseSpread = Math.max(range * 0.02, spreadPct * range);
+    const spread = baseSpread * SHOT_SPREAD_MULT[type];
+
+    // Reset transient state before returning so callers see a clean
+    // engine immediately after commit.
     setState('ready');
     setAimX(null);
     setLandingX(null);
     setPower(1);
+
+    if (type === 'sweep') {
+      const halfWidth = range * SWEEP_HALF_WIDTH_PCT;
+      const low = Math.max(lowerBound, center - halfWidth);
+      const high = Math.min(upperBound, center + halfWidth);
+      return { type: 'range', low, high, weight: 1, sharpness: 0.2 };
+    }
+
+    if (type === 'curl') {
+      // Side derived from which half of the goal the user aimed at.
+      // Left half (landingX < 0.5) bends left = negative skew (longer
+      // left tail), right half bends right = positive skew.
+      const skew = landingX < 0.5 ? -0.6 : 0.6;
+      return { type: 'point', center, spread, weight: 1, skew };
+    }
+
     return { type: 'point', center, spread, weight: 1 };
-  }, [market, landingX, power, wind]);
+  }, [market, landingX, power]);
 
   const reset = useCallback(() => {
     setState('ready');
@@ -181,7 +230,6 @@ export function useKickEngine(market: MarketState | null): KickEngine {
     timingPhaseRef,
     aimX,
     power,
-    wind,
     landingX,
     sweetSpot: { center: SWEET_SPOT_CENTER, halfWidth: SWEET_SPOT_HALF_WIDTH },
     primaryLabel,

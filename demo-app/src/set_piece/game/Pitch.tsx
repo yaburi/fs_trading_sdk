@@ -1,6 +1,6 @@
-import { useEffect, useRef, type MutableRefObject } from 'react';
+import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import type { MarketState, ConsensusCurve, PointRegion } from '@functionspace/core';
+import type { MarketState, ConsensusCurve, Region } from '@functionspace/core';
 
 /**
  * The pitch canvas — the visual home of every kick.
@@ -70,8 +70,9 @@ interface PitchProps {
   market: MarketState;
   consensus: ConsensusCurve | null;
   aim?: AimDescriptor | null;
-  /** Previously-landed kicks rendered as small coral markers on the goal-line. */
-  kicks?: PointRegion[];
+  /** Previously-landed kicks rendered as small coral markers on the goal-line.
+   *  PointRegion = single dot at center; RangeRegion = bracketed band. */
+  kicks?: Region[];
   /** Composed-belief density curve, drawn as a coral line over the goal mouth. */
   belief?: BeliefCurve | null;
   /** When set, the ball animates from the penalty spot to this position. */
@@ -110,10 +111,10 @@ export function Pitch({
 
   return (
     <div
+      className="sp-pitch-canvas"
       style={{
         position: 'relative',
         width: '100%',
-        aspectRatio: `${VIEW_W} / ${VIEW_H}`,
         borderRadius: 'var(--sp-radius-md)',
         overflow: 'hidden',
         background:
@@ -124,7 +125,10 @@ export function Pitch({
         viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
         width="100%"
         height="100%"
-        preserveAspectRatio="xMidYMid meet"
+        // xMidYMax anchors the pitch to the bottom of the container, so when
+        // the canvas is taller than 4:3 (desktop) the extra room appears as
+        // sky above the goal frame -- not blank space below the ball.
+        preserveAspectRatio="xMidYMax meet"
         style={{ position: 'absolute', inset: 0, display: 'block' }}
       >
         <defs>
@@ -265,10 +269,9 @@ export function Pitch({
           {fmt(upperBound)}
         </text>
 
-        {/* Payout legend — maps color → meaning without implying that the
-         * strip always runs low-to-high left-to-right. The peak crowd density
-         * can sit anywhere, so the legend describes the colors themselves.
-         * Hidden during timing so the arc above the ball reads cleanly. */}
+        {/* Payout legend — explicitly tells the user that the thin (green)
+         *  zones pay more than the crowded (red) zones. Hidden during
+         *  timing so the arc above the ball reads cleanly. */}
         {consensus && consensus.points.length > 1 && !timing ? (
           <text
             x={(PITCH.goalLeft + PITCH.goalRight) / 2}
@@ -280,9 +283,9 @@ export function Pitch({
             letterSpacing="0.06em"
           >
             <tspan fill="#EF4444">RED</tspan>
-            <tspan fill="var(--sp-text-secondary)" fontWeight="500">{' = LOW PAYOUT · '}</tspan>
+            <tspan fill="var(--sp-text-secondary)" fontWeight="500">{' = WHERE THE CROWD IS · '}</tspan>
             <tspan fill="#22C55E">GREEN</tspan>
-            <tspan fill="var(--sp-text-secondary)" fontWeight="500">{' = BIG PAYOUT'}</tspan>
+            <tspan fill="var(--sp-text-secondary)" fontWeight="500">{' = BIGGER PAYOUT'}</tspan>
           </text>
         ) : null}
 
@@ -316,16 +319,16 @@ export function Pitch({
           />
         ) : null}
 
-        {/* Past kick markers (from prior kicks this round) */}
-        {kicks.map((k, i) => {
-          const px = outcomeToPixelX(k.center, lowerBound, upperBound);
-          return (
-            <g key={i} transform={`translate(${px}, ${PITCH.goalBottom})`}>
-              <circle cx="0" cy="0" r="4" fill="var(--sp-accent)" opacity="0.65" />
-              <circle cx="0" cy="0" r="2" fill="var(--sp-accent)" />
-            </g>
-          );
-        })}
+        {/* Past kick markers (from prior kicks this round). Point kicks render
+         *  as a single dot; range (sweep) kicks render as a bracketed band so
+         *  the user can read the shape at a glance. */}
+        <KickMarkers
+          kicks={kicks}
+          lowerBound={lowerBound}
+          upperBound={upperBound}
+          formatOutcome={fmt}
+          units={market.xAxisUnits || ''}
+        />
 
         {/* Aim dot: live oscillator OR static locked position. */}
         {aim?.kind === 'live' && <AimDotLive phaseRef={aim.phaseRef} />}
@@ -745,6 +748,158 @@ function BeliefPath({ points, lowerBound, upperBound }: BeliefPathProps) {
         strokeLinejoin="round"
         fill="none"
       />
+    </g>
+  );
+}
+
+interface KickMarkersProps {
+  kicks: Region[];
+  lowerBound: number;
+  upperBound: number;
+  formatOutcome: (n: number) => string;
+  units: string;
+}
+
+/**
+ * Renders previously-landed kicks on the goal-line. Point kicks become
+ * a small dot at the center; range kicks become a bracketed band so the
+ * user can see the shape they chose. Hovering a marker shows a floating
+ * tooltip with the exact outcome value(s).
+ */
+function KickMarkers({
+  kicks,
+  lowerBound,
+  upperBound,
+  formatOutcome,
+  units,
+}: KickMarkersProps) {
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+
+  return (
+    <g>
+      {kicks.map((k, i) => {
+        const isHover = hoverIdx === i;
+        if (k.type === 'range') {
+          const xLo = outcomeToPixelX(k.low, lowerBound, upperBound);
+          const xHi = outcomeToPixelX(k.high, lowerBound, upperBound);
+          const xMid = (xLo + xHi) / 2;
+          const tooltip = units
+            ? `${formatOutcome(k.low)}–${formatOutcome(k.high)} ${units}`
+            : `${formatOutcome(k.low)}–${formatOutcome(k.high)}`;
+          return (
+            <g key={i}>
+              {/* Bracket band */}
+              <line
+                x1={xLo}
+                y1={PITCH.goalBottom}
+                x2={xHi}
+                y2={PITCH.goalBottom}
+                stroke="var(--sp-accent)"
+                strokeWidth="4"
+                strokeLinecap="round"
+                opacity="0.55"
+              />
+              <line
+                x1={xLo}
+                y1={PITCH.goalBottom - 4}
+                x2={xLo}
+                y2={PITCH.goalBottom + 4}
+                stroke="var(--sp-accent)"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+              <line
+                x1={xHi}
+                y1={PITCH.goalBottom - 4}
+                x2={xHi}
+                y2={PITCH.goalBottom + 4}
+                stroke="var(--sp-accent)"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+              {/* Invisible wide hit target -- the rendered bracket itself
+                  is thin and easy to miss with the cursor. */}
+              <rect
+                x={xLo - 6}
+                y={PITCH.goalBottom - 10}
+                width={xHi - xLo + 12}
+                height="20"
+                fill="transparent"
+                style={{ cursor: 'help' }}
+                onMouseEnter={() => setHoverIdx(i)}
+                onMouseLeave={() => setHoverIdx(null)}
+              />
+              {isHover && (
+                <KickTooltip x={xMid} y={PITCH.goalBottom - 14} label={tooltip} />
+              )}
+            </g>
+          );
+        }
+
+        // SplineRegion isn't produced by this app's kick engine, but the
+        // type union allows it -- bail out rather than guess a center.
+        if (k.type !== 'point') return null;
+
+        const px = outcomeToPixelX(k.center, lowerBound, upperBound);
+        const tooltip = units
+          ? `${formatOutcome(k.center)} ${units}`
+          : formatOutcome(k.center);
+        return (
+          <g key={i} transform={`translate(${px}, ${PITCH.goalBottom})`}>
+            <circle cx="0" cy="0" r="4" fill="var(--sp-accent)" opacity="0.65" />
+            <circle cx="0" cy="0" r="2" fill="var(--sp-accent)" />
+            <circle
+              cx="0"
+              cy="0"
+              r="10"
+              fill="transparent"
+              style={{ cursor: 'help' }}
+              onMouseEnter={() => setHoverIdx(i)}
+              onMouseLeave={() => setHoverIdx(null)}
+            />
+            {isHover && <KickTooltip x={0} y={-14} label={tooltip} />}
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
+function KickTooltip({ x, y, label }: { x: number; y: number; label: string }) {
+  // Approximate text width to size the bubble. 6.2px per char at the
+  // chosen 10px mono font roughly matches Geist Mono's advance width.
+  const padX = 6;
+  const padY = 4;
+  const w = Math.max(40, label.length * 6.2 + padX * 2);
+  const h = 18;
+  return (
+    <g transform={`translate(${x}, ${y})`} style={{ pointerEvents: 'none' }}>
+      <rect
+        x={-w / 2}
+        y={-h}
+        width={w}
+        height={h}
+        rx="5"
+        fill="var(--sp-text)"
+        opacity="0.92"
+      />
+      {/* Tail under the bubble */}
+      <polygon
+        points={`-4,${-2} 4,${-2} 0,${4}`}
+        fill="var(--sp-text)"
+        opacity="0.92"
+      />
+      <text
+        x="0"
+        y={-h / 2 + 3}
+        textAnchor="middle"
+        fontFamily="var(--sp-font-mono)"
+        fontSize="10"
+        fontWeight="600"
+        fill="var(--sp-surface)"
+      >
+        {label}
+      </text>
     </g>
   );
 }

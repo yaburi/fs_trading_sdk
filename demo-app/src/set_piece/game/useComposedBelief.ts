@@ -6,7 +6,7 @@ import {
 } from '@functionspace/core';
 import type {
   MarketState,
-  PointRegion,
+  Region,
   BeliefVector,
   ConsensusSummary,
 } from '@functionspace/core';
@@ -26,13 +26,14 @@ interface ComposedBelief {
  *
  * Returns `null` when no market is loaded or no kicks have been taken.
  *
- * Every kick is a PointRegion; `generateBelief` sums them and normalizes
- * to a valid BeliefVector. The vector + the market's numBuckets is exactly
- * what `useBuy.execute()` expects.
+ * Each kick is a Region (PointRegion or RangeRegion, depending on shot
+ * type); `generateBelief` sums them and normalizes to a valid
+ * BeliefVector. The vector + the market's numBuckets is exactly what
+ * `useBuy.execute()` expects.
  */
 export function useComposedBelief(
   market: MarketState | null,
-  kicks: PointRegion[],
+  kicks: Region[],
   numCurvePoints: number = 80,
 ): ComposedBelief | null {
   return useMemo(() => {

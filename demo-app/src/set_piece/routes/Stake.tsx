@@ -333,8 +333,8 @@ export default function Stake() {
           padding: '0 8px',
         }}
       >
-        You'll take 1 to 5 kicks. Each kick adds a region to your belief.
-        Aim where the keeper is faded for a bigger potential payout.
+        You'll take 1 to 5 kicks. Each kick adds to your prediction.
+        Aim where the crowd isn't for a bigger potential payout.
       </div>
     </PageShell>
   );
