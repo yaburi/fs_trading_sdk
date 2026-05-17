@@ -152,17 +152,24 @@ export default function Game() {
     };
 
     // Trapezoidal integration of payout(x) · belief(x) dx over the user's
-    // belief PDF. evaluateDensityCurve returns a normalized density so the
-    // result is the expectation directly -- no further scaling.
+    // belief PDF. evaluateDensityCurve's analytical scale slightly mis-
+    // normalizes for non-uniform coefficients (boundary B-spline basis
+    // functions are truncated, so a single interior bucket integrates to
+    // (K+2)/K instead of 1), so divide by the belief's own trapezoid mass
+    // to guarantee expected <= max(payout).
     const pts = composed.curve.points;
     let expected = 0;
+    let beliefMass = 0;
     for (let i = 1; i < pts.length; i++) {
       const a = pts[i - 1];
       const b = pts[i];
+      const dx = b.x - a.x;
       const ga = payoutAt(a.x) * a.y;
       const gb = payoutAt(b.x) * b.y;
-      expected += ((ga + gb) / 2) * (b.x - a.x);
+      expected += ((ga + gb) / 2) * dx;
+      beliefMass += ((a.y + b.y) / 2) * dx;
     }
+    if (beliefMass > 0) expected /= beliefMass;
 
     // Bhattacharyya coefficient: ∫ √(user(x) · crowd(x)) dx. Both PDFs are
     // sampled by evaluateDensityCurve on the same uniform grid, so we can
