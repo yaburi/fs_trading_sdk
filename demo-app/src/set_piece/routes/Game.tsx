@@ -478,7 +478,7 @@ export default function Game() {
                       >
                         {Math.round(payoutSummary.crowdAlignment * 100)}%
                       </span>{' '}
-                      aligned with the crowd
+                      aligned with the consensus
                     </div>
                   )}
                 </>
