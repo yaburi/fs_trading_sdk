@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { AnimatePresence } from 'framer-motion';
 import { FunctionSpaceProvider, useAuth } from '@functionspace/react';
 import { setPieceConfig, setPieceTheme } from './theme';
 import { RoundProvider } from './state/RoundContext';
@@ -29,16 +30,25 @@ export default function App() {
       <AuthPersistence />
       <RoundProvider>
         <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<MarketList />} />
-            <Route path="/m/:marketId/stake" element={<Stake />} />
-            <Route path="/m/:marketId/play" element={<Game />} />
-            <Route path="/calls" element={<MyCalls />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          <AppRoutes />
         </BrowserRouter>
       </RoundProvider>
     </FunctionSpaceProvider>
+  );
+}
+
+function AppRoutes() {
+  const location = useLocation();
+  return (
+    <AnimatePresence mode="wait">
+      <Routes location={location} key={location.pathname}>
+        <Route path="/" element={<MarketList />} />
+        <Route path="/m/:marketId/stake" element={<Stake />} />
+        <Route path="/m/:marketId/play" element={<Game />} />
+        <Route path="/calls" element={<MyCalls />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </AnimatePresence>
   );
 }
 

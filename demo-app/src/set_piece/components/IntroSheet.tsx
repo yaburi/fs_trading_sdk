@@ -43,14 +43,14 @@ const STEPS = [
     overline: 'Step 2',
     title: 'Take the kick',
     body:
-      "Line up the aim, time your release on the meter. Hit the sweet spot for a tight, confident shot. Miss it and your kick sprays — your call gets fuzzier.",
+      "Line up the aim, time your release on the meter. Hit the sweet spot for a tight, confident shot. Miss it and your kick sprays. Your call gets fuzzier.",
     badge: { bg: '#FFEDD5', fg: '#EA580C', glyph: glyphAim },
   },
   {
     overline: 'Step 3',
     title: 'Beat the crowd',
     body:
-      "You get up to 5 kicks. Stack them tight for conviction, or spread them wide to hedge. Aim where the crowd isn't — that's where the big payouts live.",
+      "You get up to 5 kicks. Stack them tight for conviction, or spread them wide to hedge. Aim where the crowd isn't. That's where the big payouts live.",
     badge: { bg: '#FCE7F3', fg: '#DB2777', glyph: glyphStack },
   },
 ];

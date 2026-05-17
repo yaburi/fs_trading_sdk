@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useMarkets } from '@functionspace/react';
 import type { MarketState } from '@functionspace/core';
 import { MarketRow } from './MarketRow';
 
-type ScopeId = 'wc' | 'all';
+type ScopeId = 'wc' | 'soccer';
 
 interface MarketPickerModalProps {
   open: boolean;
@@ -18,7 +18,8 @@ interface MarketPickerModalProps {
 /**
  * Centered modal market picker. Lets the user swap markets without
  * leaving the Game screen. Defaults to the World Cup slice; toggling
- * to All widens to every open market.
+ * to All Soccer widens to every open soccer market that isn't already
+ * part of the World Cup tab.
  */
 export function MarketPickerModal({
   open,
@@ -27,12 +28,17 @@ export function MarketPickerModal({
   activeMarketId,
 }: MarketPickerModalProps) {
   const [scope, setScope] = useState<ScopeId>('wc');
-  const { markets, loading, error } = useMarkets({
-    categories: scope === 'wc' ? ['World Cup'] : undefined,
+  const { markets: rawMarkets, loading, error } = useMarkets({
+    categories: scope === 'wc' ? ['World Cup'] : ['Soccer'],
     state: 'open',
     sortBy: 'totalVolume',
     sortOrder: 'desc',
   });
+
+  const markets = useMemo(() => {
+    if (scope === 'wc') return rawMarkets;
+    return rawMarkets.filter((m) => !(m.categories ?? []).includes('World Cup'));
+  }, [rawMarkets, scope]);
 
   // Freeze background scroll while the modal is open.
   useEffect(() => {
@@ -143,16 +149,16 @@ export function MarketPickerModal({
               style={{
                 display: 'inline-flex',
                 padding: '4px',
-                borderRadius: '999px',
-                background: 'var(--sp-surface)',
-                border: '1px solid var(--sp-border)',
-                alignSelf: 'flex-start',
                 gap: '2px',
+                background: 'var(--sp-surface-2)',
+                borderRadius: 'var(--sp-radius-pill)',
+                border: '1px solid var(--sp-border-subtle)',
+                alignSelf: 'flex-start',
               }}
             >
-              {(['wc', 'all'] as ScopeId[]).map((id) => {
+              {(['wc', 'soccer'] as ScopeId[]).map((id) => {
                 const active = id === scope;
-                const label = id === 'wc' ? 'World Cup' : 'All markets';
+                const label = id === 'wc' ? 'World Cup' : 'All Soccer';
                 return (
                   <button
                     key={id}
@@ -161,12 +167,13 @@ export function MarketPickerModal({
                     onClick={() => setScope(id)}
                     className={active ? 'sp-tap' : 'sp-tap sp-tap-chip'}
                     style={{
-                      padding: '6px 14px',
+                      padding: '6px 16px',
                       borderRadius: '999px',
                       background: active ? 'var(--sp-primary)' : 'transparent',
                       color: active ? 'var(--sp-on-primary)' : 'var(--sp-text-secondary)',
-                      fontSize: '12px',
                       fontWeight: 600,
+                      fontSize: '13px',
+                      boxShadow: active ? '0 1px 2px rgb(0 0 0 / 0.06)' : 'none',
                       cursor: 'pointer',
                     }}
                   >

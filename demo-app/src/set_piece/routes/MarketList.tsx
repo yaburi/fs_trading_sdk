@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMarkets } from '@functionspace/react';
 import { PageShell } from '../components/PageShell';
@@ -7,21 +7,27 @@ import { Card } from '../components/Card';
 import { MarketRow } from '../components/MarketRow';
 import { IntroSheet } from '../components/IntroSheet';
 
-type ScopeId = 'wc' | 'all';
+type ScopeId = 'wc' | 'soccer';
 
 export default function MarketList() {
   const navigate = useNavigate();
-  // Default to the World Cup slice but let the user widen the list to
-  // every open market. Stored as local state so toggling is instant; no
-  // need to persist across navigations -- defaulting back to World Cup on
-  // re-entry matches the marketed positioning of the app.
+  // Default to the World Cup slice; the alternate scope widens to every
+  // open soccer market that isn't already part of the World Cup tab.
   const [scope, setScope] = useState<ScopeId>('wc');
-  const { markets, loading, error, refetch } = useMarkets({
-    categories: scope === 'wc' ? ['World Cup'] : undefined,
+  const { markets: rawMarkets, loading, error, refetch } = useMarkets({
+    categories: scope === 'wc' ? ['World Cup'] : ['Soccer'],
     state: 'open',
     sortBy: 'totalVolume',
     sortOrder: 'desc',
   });
+
+  // The "All Soccer" tab is everything tagged Soccer minus markets that are
+  // also tagged World Cup (those already have their own tab). The SDK filter
+  // layer has no notIn action, so we trim the World Cup overlap here.
+  const markets = useMemo(() => {
+    if (scope === 'wc') return rawMarkets;
+    return rawMarkets.filter((m) => !(m.categories ?? []).includes('World Cup'));
+  }, [rawMarkets, scope]);
 
   return (
     <PageShell header={<Header />}>
@@ -50,7 +56,7 @@ export default function MarketList() {
             lineHeight: 1.5,
           }}
         >
-          Skip the sliders. Aim, time, kick — your shots become your call. Land it where the crowd isn't and the payout opens up.
+          Skip the sliders. Aim, time, kick. Your shots land where you point. Find the gap in the crowd and the payout follows.
         </p>
       </div>
 
@@ -95,11 +101,11 @@ export default function MarketList() {
       {!loading && !error && markets.length === 0 && (
         <Card>
           <div className="sp-display-md" style={{ fontSize: '18px', marginBottom: '4px' }}>
-            {scope === 'wc' ? 'No World Cup markets right now' : 'No open markets right now'}
+            {scope === 'wc' ? 'No World Cup markets right now' : 'No soccer markets right now'}
           </div>
           <div className="sp-secondary" style={{ fontSize: '14px' }}>
             {scope === 'wc'
-              ? 'Try All markets, or check back closer to kickoff.'
+              ? 'Try All Soccer, or check back closer to kickoff.'
               : 'Check back soon.'}
           </div>
         </Card>
@@ -137,7 +143,7 @@ function ScopeToggle({
 }) {
   const tabs: { id: ScopeId; label: string }[] = [
     { id: 'wc', label: 'World Cup' },
-    { id: 'all', label: 'All markets' },
+    { id: 'soccer', label: 'All Soccer' },
   ];
   return (
     <div
@@ -146,11 +152,11 @@ function ScopeToggle({
       style={{
         display: 'inline-flex',
         padding: '4px',
-        borderRadius: '999px',
-        background: 'var(--sp-surface)',
-        border: '1px solid var(--sp-border)',
-        alignSelf: 'flex-start',
         gap: '2px',
+        background: 'var(--sp-surface-2)',
+        borderRadius: 'var(--sp-radius-pill)',
+        border: '1px solid var(--sp-border-subtle)',
+        alignSelf: 'flex-start',
       }}
     >
       {tabs.map((t) => {
@@ -163,12 +169,14 @@ function ScopeToggle({
             onClick={() => onChange(t.id)}
             className={active ? 'sp-tap' : 'sp-tap sp-tap-chip'}
             style={{
-              padding: '6px 14px',
+              padding: '6px 16px',
               borderRadius: '999px',
               background: active ? 'var(--sp-primary)' : 'transparent',
               color: active ? 'var(--sp-on-primary)' : 'var(--sp-text-secondary)',
-              fontSize: '12px',
               fontWeight: 600,
+              fontSize: '13px',
+              boxShadow: active ? '0 1px 2px rgb(0 0 0 / 0.06)' : 'none',
+              cursor: 'pointer',
             }}
           >
             {t.label}

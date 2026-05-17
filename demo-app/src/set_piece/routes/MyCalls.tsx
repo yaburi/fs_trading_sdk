@@ -32,7 +32,7 @@ export default function MyCalls() {
             Sign in to see your calls
           </div>
           <div className="sp-secondary" style={{ fontSize: '13px', marginBottom: '14px' }}>
-            Your open positions and trade history will live here. We never ask for an email.
+            Open positions and call history go here. No email needed.
           </div>
           <Pill variant="accent" size="md" onClick={() => setAuthOpen(true)}>
             Sign in
@@ -96,8 +96,8 @@ function TabButton({
       style={{
         padding: '6px 16px',
         borderRadius: '999px',
-        background: active ? 'var(--sp-surface)' : 'transparent',
-        color: active ? 'var(--sp-text)' : 'var(--sp-text-secondary)',
+        background: active ? 'var(--sp-primary)' : 'transparent',
+        color: active ? 'var(--sp-on-primary)' : 'var(--sp-text-secondary)',
         fontWeight: 600,
         fontSize: '13px',
         boxShadow: active ? '0 1px 2px rgb(0 0 0 / 0.06)' : 'none',
@@ -433,7 +433,7 @@ function EmptyAcrossAllHint({ tab }: { tab: TabKey }) {
             </button>
           </>
         ) : (
-          <>Closed positions and historical kicks will show up here once they settle.</>
+          <>Closed positions appear here once they settle.</>
         )}
       </div>
     </Card>

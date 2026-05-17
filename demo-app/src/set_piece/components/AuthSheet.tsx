@@ -108,7 +108,7 @@ function AuthSheetBody({
       <div>
         <SheetHeader
           title={`Hey, ${user.username}`}
-          subtitle="Manage your kick account."
+          subtitle="Manage your account"
           onClose={onClose}
         />
 
@@ -220,7 +220,7 @@ function AuthSheetBody({
           lineHeight: 1.4,
         }}
       >
-        New here? We'll make the account for you on first sign in.
+        First time here? Your account is created on sign-in.
       </div>
     </form>
   );

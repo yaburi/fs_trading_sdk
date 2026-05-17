@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 
 interface PageShellProps {
   children: ReactNode;
@@ -13,6 +14,9 @@ interface PageShellProps {
  * Mobile fills the viewport; desktop gets paper margins on the sides.
  */
 export function PageShell({ children, header, footer }: PageShellProps) {
+  const reduceMotion = useReducedMotion();
+  const yOffset = reduceMotion ? 0 : 16;
+
   return (
     <div
       style={{
@@ -70,7 +74,7 @@ export function PageShell({ children, header, footer }: PageShellProps) {
         </div>
       )}
 
-      <main
+      <motion.main
         className={footer ? 'sp-pageshell-main sp-pageshell-main--with-footer' : 'sp-pageshell-main'}
         style={{
           width: '100%',
@@ -79,14 +83,28 @@ export function PageShell({ children, header, footer }: PageShellProps) {
           flexDirection: 'column',
           gap: '20px',
         }}
+        initial={{ opacity: 0, y: yOffset }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: yOffset }}
+        transition={{ duration: reduceMotion ? 0.1 : 0.22, ease: [0.22, 1, 0.36, 1] }}
       >
         {children}
-      </main>
+      </motion.main>
 
       {footer && (
-        <div className="sp-pageshell-footer">
+        <motion.div
+          className="sp-pageshell-footer"
+          initial={{ opacity: 0, y: yOffset }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: yOffset }}
+          transition={{
+            duration: reduceMotion ? 0.1 : 0.22,
+            ease: [0.22, 1, 0.36, 1],
+            delay: reduceMotion ? 0 : 0.05,
+          }}
+        >
           <div className="sp-pageshell-footer-inner">{footer}</div>
-        </div>
+        </motion.div>
       )}
     </div>
   );
