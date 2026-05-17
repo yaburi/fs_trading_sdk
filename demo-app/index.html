@@ -12,6 +12,17 @@
       href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Caveat:wght@500;700&display=swap"
       rel="stylesheet"
     />
+    <!-- Preload Caveat 700 (latin) so the GOOOAL! celebration renders without
+         a FOUT. Same URL the Google Fonts CSS resolves to; if Google bumps
+         the font version the preload silently misses but the CSS still
+         works. -->
+    <link
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      href="https://fonts.gstatic.com/s/caveat/v23/WnznHAc5bAfYB2QRah7pcpNvOx-pjRV6eIWpYT5Kmgq3sw.woff2"
+      crossorigin
+    />
   </head>
   <body>
     <div id="root"></div>
