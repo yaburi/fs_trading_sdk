@@ -1,6 +1,7 @@
 import type { MarketState } from '@functionspace/core';
 import { Card } from './Card';
 import { MarketIcon } from './MarketIcon';
+import { MarketStats } from './MarketStats';
 
 interface MarketRowProps {
   market: MarketState;
@@ -28,20 +29,8 @@ function pickTags(market: MarketState): string[] {
   return filtered.slice(0, 2);
 }
 
-function formatRange(market: MarketState): string {
-  const { lowerBound, upperBound } = market.config;
-  const decimals = market.decimals ?? 0;
-  const fmt = (n: number) =>
-    n.toLocaleString(undefined, {
-      minimumFractionDigits: decimals,
-      maximumFractionDigits: decimals,
-    });
-  return `${fmt(lowerBound)} – ${fmt(upperBound)}`;
-}
-
 export function MarketRow({ market, onClick }: MarketRowProps) {
   const tags = pickTags(market);
-  const units = market.xAxisUnits || '';
   const isResolved = market.resolutionState !== 'open';
 
   return (
@@ -61,17 +50,8 @@ export function MarketRow({ market, onClick }: MarketRowProps) {
             {market.title}
           </div>
 
-          <div
-            className="sp-secondary"
-            style={{ fontSize: '12px', marginBottom: '10px' }}
-          >
-            <span className="sp-uppercase" style={{ marginRight: '6px' }}>
-              Range
-            </span>
-            <span className="sp-mono" style={{ color: 'var(--sp-text)' }}>
-              {formatRange(market)}
-            </span>
-            {units && <span style={{ marginLeft: '4px' }}>{units}</span>}
+          <div style={{ marginBottom: '10px' }}>
+            <MarketStats market={market} size="md" />
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>

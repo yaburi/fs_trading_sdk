@@ -6,6 +6,7 @@ import { Header } from '../components/Header';
 import { Card } from '../components/Card';
 import { Pill } from '../components/Pill';
 import { MarketIcon } from '../components/MarketIcon';
+import { MarketStats } from '../components/MarketStats';
 import { useRound } from '../state/RoundContext';
 
 const HARD_CAP = 100;
@@ -30,17 +31,6 @@ export default function Stake() {
     }
     return HARD_CAP;
   }, [isAuthenticated, user]);
-
-  const consensusHint = useMemo(() => {
-    if (!market) return null;
-    const mean = market.consensusMean;
-    if (mean == null || !isFinite(mean)) return null;
-    const decimals = market.decimals ?? 0;
-    return mean.toLocaleString(undefined, {
-      minimumFractionDigits: decimals,
-      maximumFractionDigits: decimals,
-    });
-  }, [market]);
 
   const handlePick = (value: number) => {
     const next = Math.min(value, walletMax);
@@ -110,7 +100,7 @@ export default function Stake() {
             <MarketIcon market={market} size={44} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="sp-uppercase sp-secondary" style={{ marginBottom: '6px' }}>
-                Your match-up
+                Selected market
               </div>
               <div
                 className="sp-display-md"
@@ -118,34 +108,7 @@ export default function Stake() {
               >
                 {market.title}
               </div>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'baseline',
-                  gap: '12px',
-                  fontSize: '13px',
-                  color: 'var(--sp-text-secondary)',
-                  flexWrap: 'wrap',
-                }}
-              >
-                <span>
-                  Range{' '}
-                  <span className="sp-mono" style={{ color: 'var(--sp-text)' }}>
-                    {market.config.lowerBound} – {market.config.upperBound}
-                  </span>
-                  {market.xAxisUnits && (
-                    <span className="sp-secondary"> {market.xAxisUnits}</span>
-                  )}
-                </span>
-                {consensusHint && (
-                  <span>
-                    Crowd expects ~
-                    <span className="sp-mono" style={{ color: 'var(--sp-text)' }}>
-                      {consensusHint}
-                    </span>
-                  </span>
-                )}
-              </div>
+              <MarketStats market={market} size="lg" />
             </div>
           </div>
         )}
@@ -342,7 +305,7 @@ export default function Stake() {
         }}
       >
         Five kicks max. Stack them tight for conviction, or fan them out to hedge.
-        Where the crowd isn't, the payout is.
+        Where the consensus isn't, the payout is.
       </div>
     </PageShell>
   );

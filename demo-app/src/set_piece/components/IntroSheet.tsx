@@ -1,8 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Pill } from './Pill';
-
-const STORAGE_KEY = 'sp:seen-intro';
 
 /** Crafted glyphs matching MarketIcon's stroke language (1.8 round-cap). */
 const glyphPick: ReactNode = (
@@ -48,35 +47,30 @@ const STEPS = [
   },
   {
     overline: 'Step 3',
-    title: 'Beat the crowd',
+    title: 'Beat the consensus',
     body:
-      "You get up to 5 kicks. Stack them tight for conviction, or spread them wide to hedge. Aim where the crowd isn't. That's where the big payouts live.",
+      "You get up to 5 kicks. Stack them tight for conviction, or spread them wide to hedge. Aim where the consensus isn't. That's where the big payouts live.",
     badge: { bg: '#FCE7F3', fg: '#DB2777', glyph: glyphStack },
   },
 ];
 
 interface IntroSheetProps {
-  /** When true, never show (and clear localStorage). For testing. */
-  forceShow?: boolean;
+  open: boolean;
+  onClose: () => void;
 }
 
 /**
- * First-time bottom-sheet that introduces the kick mechanic in three cards.
- * Persists a localStorage flag so it only appears once per device.
+ * Bottom-sheet that introduces the kick mechanic in three cards. Controlled
+ * by the parent; first-visit auto-show lives at the call site.
  */
-export function IntroSheet({ forceShow = false }: IntroSheetProps) {
-  const [open, setOpen] = useState(false);
+export function IntroSheet({ open, onClose }: IntroSheetProps) {
   const [step, setStep] = useState(0);
 
+  // Reset to the first card whenever the sheet opens so re-triggering from
+  // the info button doesn't strand the user mid-flow.
   useEffect(() => {
-    try {
-      const seen = localStorage.getItem(STORAGE_KEY);
-      if (!seen || forceShow) setOpen(true);
-    } catch {
-      // localStorage may be disabled, default to showing the sheet
-      setOpen(true);
-    }
-  }, [forceShow]);
+    if (open) setStep(0);
+  }, [open]);
 
   // Freeze background scroll while the sheet is open.
   useEffect(() => {
@@ -88,31 +82,27 @@ export function IntroSheet({ forceShow = false }: IntroSheetProps) {
     };
   }, [open]);
 
-  const close = () => {
-    try {
-      localStorage.setItem(STORAGE_KEY, '1');
-    } catch {
-      /* ignore */
-    }
-    setOpen(false);
-  };
-
   const handleNext = () => {
     if (step < STEPS.length - 1) setStep(step + 1);
-    else close();
+    else onClose();
   };
 
   const current = STEPS[step];
 
-  return (
+  // Portal to document.body so the sheet escapes any parent transform/opacity
+  // context (PageShell's motion.main animates in on mount, which would
+  // otherwise fade the scrim along with the page on first paint).
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <AnimatePresence>
       {open && (
         <motion.div
-          initial={{ opacity: 0 }}
+          initial={{ opacity: 1 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
-          onClick={close}
+          onClick={onClose}
           style={{
             position: 'fixed',
             inset: 0,
@@ -170,7 +160,7 @@ export function IntroSheet({ forceShow = false }: IntroSheetProps) {
                 ))}
               </div>
               <button
-                onClick={close}
+                onClick={onClose}
                 className="sp-tap sp-tap-link"
                 style={{
                   fontSize: '12px',
@@ -238,6 +228,7 @@ export function IntroSheet({ forceShow = false }: IntroSheetProps) {
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }

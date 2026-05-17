@@ -158,7 +158,7 @@ function AuthSheetBody({
     <form onSubmit={handleSubmit}>
       <SheetHeader
         title="Sign in"
-        subtitle="Just a username. No password, no email."
+        subtitle="Sign in to save your kicks."
         onClose={onClose}
       />
 

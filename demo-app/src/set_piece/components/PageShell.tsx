@@ -24,7 +24,7 @@ export function PageShell({ children, header, footer }: PageShellProps) {
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        background: 'var(--sp-bg)',
+        background: 'transparent',
       }}
     >
       {header && (
@@ -38,9 +38,9 @@ export function PageShell({ children, header, footer }: PageShellProps) {
         >
           {/*
            * Glass layer with top-heavy blur that fades out toward the bottom.
-           * Sits behind the header content; pointer-events disabled so taps pass through.
-           * Extends a few pixels below the band so the fade dissolves into the page
-           * rather than terminating on a hard edge.
+           * No tint: a mask scales the blur strength from full at the top to
+           * zero past the bottom edge, so the band dissolves into the page
+           * rather than terminating on a hard edge or solid fill.
            */}
           <div
             aria-hidden
@@ -51,8 +51,6 @@ export function PageShell({ children, header, footer }: PageShellProps) {
               right: 0,
               bottom: '-12px',
               pointerEvents: 'none',
-              background:
-                'linear-gradient(to bottom, var(--sp-glass-top) 0%, var(--sp-glass-mid) 60%, rgba(244, 244, 245, 0) 100%)',
               backdropFilter: 'blur(12px)',
               WebkitBackdropFilter: 'blur(12px)',
               maskImage:
@@ -103,6 +101,13 @@ export function PageShell({ children, header, footer }: PageShellProps) {
             delay: reduceMotion ? 0 : 0.05,
           }}
         >
+          {/*
+           * Mirror of the header glass: bottom-heavy blur that fades upward.
+           * No tint, only a masked backdrop-filter so the band dissolves into
+           * the page above the actions. Hidden on desktop by CSS where the
+           * footer is no longer sticky.
+           */}
+          <div aria-hidden className="sp-pageshell-footer-glass" />
           <div className="sp-pageshell-footer-inner">{footer}</div>
         </motion.div>
       )}

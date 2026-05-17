@@ -37,7 +37,10 @@ export function MarketPickerModal({
 
   const markets = useMemo(() => {
     if (scope === 'wc') return rawMarkets;
-    return rawMarkets.filter((m) => !(m.categories ?? []).includes('World Cup'));
+    return rawMarkets.filter((m) => {
+      const cats = (m.metadata?.categories ?? []) as unknown;
+      return !(Array.isArray(cats) && cats.includes('World Cup'));
+    });
   }, [rawMarkets, scope]);
 
   // Freeze background scroll while the modal is open.

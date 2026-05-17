@@ -7,6 +7,7 @@ import { Header } from '../components/Header';
 import { Card } from '../components/Card';
 import { Pill } from '../components/Pill';
 import { MarketIcon } from '../components/MarketIcon';
+import { MarketStats } from '../components/MarketStats';
 import { AuthSheet } from '../components/AuthSheet';
 import { MarketPickerModal } from '../components/MarketPickerModal';
 import { GoalCelebration } from '../components/GoalCelebration';
@@ -342,38 +343,8 @@ export default function Game() {
               {market?.title ?? 'Loading…'}
             </div>
             {market && (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  marginTop: '4px',
-                  fontSize: '11px',
-                  color: 'var(--sp-text-secondary)',
-                  flexWrap: 'wrap',
-                }}
-              >
-                <span>
-                  <span className="sp-uppercase" style={{ marginRight: '4px' }}>
-                    Range
-                  </span>
-                  <span className="sp-mono" style={{ color: 'var(--sp-text)' }}>
-                    {formatBound(market.config.lowerBound, market.decimals ?? 0)}
-                    {'–'}
-                    {formatBound(market.config.upperBound, market.decimals ?? 0)}
-                  </span>
-                  {market.xAxisUnits ? ` ${market.xAxisUnits}` : ''}
-                </span>
-                <span>·</span>
-                <span>
-                  <span className="sp-uppercase" style={{ marginRight: '4px' }}>
-                    Crowd expects
-                  </span>
-                  <span className="sp-mono" style={{ color: 'var(--sp-text)' }}>
-                    {formatBound(market.consensusMean, market.decimals ?? 0)}
-                  </span>
-                  {market.xAxisUnits ? ` ${market.xAxisUnits}` : ''}
-                </span>
+              <div style={{ marginTop: '4px' }}>
+                <MarketStats market={market} size="sm" />
               </div>
             )}
           </div>
@@ -890,13 +861,6 @@ function formatPayout(value: number): string {
   if (value >= 100) return value.toFixed(0);
   if (value >= 10) return value.toFixed(1);
   return value.toFixed(2);
-}
-
-function formatBound(value: number, decimals: number): string {
-  return value.toLocaleString(undefined, {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  });
 }
 
 function SummaryCell({

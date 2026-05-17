@@ -1,8 +1,5 @@
 /* Demo app page background. Set Piece is paper-light; match it here so the
  * initial paint and iOS overscroll bands don't flash a different theme. */
-html {
-  scrollbar-gutter: stable both-edges;
-}
 
 body {
   background: #F4F4F5;

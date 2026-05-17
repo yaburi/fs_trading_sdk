@@ -9,11 +9,22 @@ import { IntroSheet } from '../components/IntroSheet';
 
 type ScopeId = 'wc' | 'soccer';
 
+const INTRO_STORAGE_KEY = 'sp:seen-intro';
+
 export default function MarketList() {
   const navigate = useNavigate();
   // Default to the World Cup slice; the alternate scope widens to every
   // open soccer market that isn't already part of the World Cup tab.
   const [scope, setScope] = useState<ScopeId>('wc');
+  // Lazy initializer so the sheet is in the tree on the first paint -- a
+  // useEffect would leave one frame where the page renders uncovered.
+  const [introOpen, setIntroOpen] = useState(() => {
+    try {
+      return !localStorage.getItem(INTRO_STORAGE_KEY);
+    } catch {
+      return true;
+    }
+  });
   const { markets: rawMarkets, loading, error, refetch } = useMarkets({
     categories: scope === 'wc' ? ['World Cup'] : ['Soccer'],
     state: 'open',
@@ -21,17 +32,30 @@ export default function MarketList() {
     sortOrder: 'desc',
   });
 
+  const closeIntro = () => {
+    try {
+      localStorage.setItem(INTRO_STORAGE_KEY, '1');
+    } catch {
+      /* ignore */
+    }
+    setIntroOpen(false);
+  };
+
   // The "All Soccer" tab is everything tagged Soccer minus markets that are
   // also tagged World Cup (those already have their own tab). The SDK filter
   // layer has no notIn action, so we trim the World Cup overlap here.
+  // Categories aren't on the typed MarketState surface; they live in metadata.
   const markets = useMemo(() => {
     if (scope === 'wc') return rawMarkets;
-    return rawMarkets.filter((m) => !(m.categories ?? []).includes('World Cup'));
+    return rawMarkets.filter((m) => {
+      const cats = (m.metadata?.categories ?? []) as unknown;
+      return !(Array.isArray(cats) && cats.includes('World Cup'));
+    });
   }, [rawMarkets, scope]);
 
   return (
     <PageShell header={<Header />}>
-      <IntroSheet />
+      <IntroSheet open={introOpen} onClose={closeIntro} />
       <div>
         <h1
           className="sp-display"
@@ -40,13 +64,10 @@ export default function MarketList() {
             margin: 0,
             marginBottom: '8px',
             letterSpacing: '-0.03em',
+            textWrap: 'balance',
           }}
         >
-          Step up.
-          <br />
-          Pick the World Cup
-          <br />
-          one kick at a time.
+          Pick the World Cup one kick at a time.
         </h1>
         <p
           className="sp-secondary"
@@ -56,7 +77,7 @@ export default function MarketList() {
             lineHeight: 1.5,
           }}
         >
-          Skip the sliders. Aim, time, kick. Your shots land where you point. Find the gap in the crowd and the payout follows.
+          Skip the sliders. Aim, time, kick. Your shots land where you point. Find the gap in the consensus and the payout follows.
         </p>
       </div>
 
@@ -95,7 +116,10 @@ export default function MarketList() {
       )}
 
       {!loading && !error && (
-        <ScopeToggle value={scope} onChange={setScope} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <ScopeToggle value={scope} onChange={setScope} />
+          <InfoButton onClick={() => setIntroOpen(true)} />
+        </div>
       )}
 
       {!loading && !error && markets.length === 0 && (
@@ -184,6 +208,48 @@ function ScopeToggle({
         );
       })}
     </div>
+  );
+}
+
+function InfoButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="How it works"
+      title="How it works"
+      className="sp-tap"
+      style={{
+        width: '36px',
+        height: '36px',
+        borderRadius: '999px',
+        background: 'var(--sp-surface)',
+        border: '1px solid var(--sp-border-subtle)',
+        color: 'var(--sp-text-secondary)',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: 'pointer',
+        flexShrink: 0,
+        padding: 0,
+      }}
+    >
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        <circle cx="12" cy="12" r="9" />
+        <path d="M9.3 9.2c.2-1.5 1.4-2.5 2.9-2.5 1.6 0 2.9 1.1 2.9 2.6 0 1.2-.7 1.8-1.7 2.4-1 .6-1.4 1.1-1.4 2v.4" />
+        <circle cx="12" cy="16.4" r="0.65" fill="currentColor" stroke="none" />
+      </svg>
+    </button>
   );
 }
 

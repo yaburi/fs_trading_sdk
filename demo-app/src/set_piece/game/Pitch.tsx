@@ -308,7 +308,7 @@ export function Pitch({
             letterSpacing="0.06em"
           >
             <tspan fill="#EF4444">RED</tspan>
-            <tspan fill="var(--sp-text-secondary)" fontWeight="500">{' = WHERE THE CROWD IS · '}</tspan>
+            <tspan fill="var(--sp-text-secondary)" fontWeight="500">{' = WHERE CONSENSUS IS · '}</tspan>
             <tspan fill="#22C55E">GREEN</tspan>
             <tspan fill="var(--sp-text-secondary)" fontWeight="500">{' = BIGGER PAYOUT'}</tspan>
           </text>

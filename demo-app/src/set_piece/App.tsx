@@ -8,6 +8,7 @@ import MarketList from './routes/MarketList';
 import Stake from './routes/Stake';
 import Game from './routes/Game';
 import MyCalls from './routes/MyCalls';
+import { Grainient } from './components/Grainient';
 import './styles.css';
 
 const STORED_USERNAME_KEY = 'set_piece:username';
@@ -28,6 +29,28 @@ export default function App() {
       storedUsername={initialStoredUsername}
     >
       <AuthPersistence />
+      <div
+        aria-hidden
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: -1,
+          pointerEvents: 'none',
+        }}
+      >
+        <Grainient
+          color1="#d6d6d6"
+          color2="#dae9c2"
+          color3="#618f80"
+          warpSpeed={0.8}
+          grainAmount={0.06}
+          blendAngle={52}
+          noiseScale={1.95}
+          saturation={1.6}
+          zoom={1.1}
+          timeSpeed={0.8}
+        />
+      </div>
       <RoundProvider>
         <BrowserRouter>
           <AppRoutes />
