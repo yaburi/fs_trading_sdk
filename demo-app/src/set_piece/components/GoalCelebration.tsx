@@ -30,7 +30,16 @@ export function GoalCelebration({ visible }: { visible: boolean }) {
           // Veil — slight tint, blurs the pitch behind the headline.
           initial={{ opacity: 0, backdropFilter: 'blur(0px)' }}
           animate={{ opacity: 1, backdropFilter: 'blur(12px)' }}
-          exit={{ opacity: 0, backdropFilter: 'blur(0px)' }}
+          exit={{
+            opacity: 0,
+            backdropFilter: 'blur(0px)',
+            // Match the headline's snappy 180ms exit so the veil clears
+            // alongside the word instead of lingering 100ms longer.
+            transition: {
+              opacity: { duration: 0.18, ease: EXIT_EASE },
+              backdropFilter: { duration: 0.18, ease: EXIT_EASE },
+            },
+          }}
           transition={{
             opacity: { duration: 0.28, ease: ENTER_EASE },
             backdropFilter: { duration: 0.28, ease: ENTER_EASE },

@@ -86,7 +86,7 @@
  * breakpoint matches the smallest viewport where a 200px sidebar still
  * fits beside the centered 520px column with comfortable margins. */
 .sp-bet-summary-slot {
-  margin-top: 12px;
+  margin-top: 8px;
 }
 .sp-bet-summary-grid {
   display: grid;
@@ -135,11 +135,12 @@
  * Desktop drops the grow so content (and the inline footer below it) sit
  * at their natural height. */
 .sp-pageshell-main {
-  padding: 20px 16px 32px;
+  padding: 12px 14px 20px;
+  gap: 12px;
   flex: 1;
 }
 .sp-pageshell-main--with-footer {
-  padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  padding-bottom: calc(80px + env(safe-area-inset-bottom));
 }
 
 /* Page shell footer band. Sticky on mobile so the primary CTA is always
@@ -167,12 +168,14 @@
   position: relative;
   max-width: var(--sp-max-width);
   margin: 0 auto;
-  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  padding: 8px 14px calc(10px + env(safe-area-inset-bottom));
 }
 
 @media (min-width: 720px) {
   .sp-pageshell-main {
     flex: 0 0 auto;
+    padding: 20px 16px 32px;
+    gap: 20px;
   }
   .sp-pageshell-main--with-footer {
     padding-bottom: 32px;
@@ -185,6 +188,42 @@
   }
   .sp-pageshell-footer-inner {
     padding: 0 16px 32px;
+  }
+}
+
+/* Mobile-only shrink of the Game footer pills so the bet summary card sits
+ * above the footer band even on short viewports. Inline styles in Pill set
+ * a fixed min-height, so we override with !important. */
+.sp-game-footer-actions .sp-game-pill-lg,
+.sp-game-footer-actions .sp-game-pill-md {
+  /* base values inherited from Pill's inline styles */
+}
+@media (max-width: 719.98px) {
+  .sp-game-footer-actions .sp-game-pill-lg {
+    min-height: 46px !important;
+    padding: 10px 22px !important;
+    font-size: 15px !important;
+  }
+  .sp-game-footer-actions .sp-game-pill-md {
+    min-height: 36px !important;
+    padding: 8px 16px !important;
+    font-size: 13px !important;
+  }
+}
+
+/* PhaseHint band sits between the canvas and footer. Tighter on mobile so
+ * it doesn't eat real estate above the kick button. */
+.sp-phase-hint {
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0 8px;
+}
+@media (min-width: 720px) {
+  .sp-phase-hint {
+    min-height: 36px;
   }
 }
 
