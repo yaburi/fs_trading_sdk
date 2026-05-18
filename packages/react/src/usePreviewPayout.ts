@@ -46,10 +46,15 @@ export function usePreviewPayout(marketId: string | number): UsePreviewPayoutRet
     clearErrorTimer();
     try {
       const marketSnapshot = cache.getSnapshot<MarketState>(['marketState', String(marketId)]);
-      const numBuckets = marketSnapshot.data?.config?.numBuckets;
+      const config = marketSnapshot.data?.config;
+      const numBuckets = config?.numBuckets;
       if (!numBuckets) throw new Error('Market data not loaded. Cannot determine numBuckets for validation.');
 
-      const result = await previewPayoutCurve(client, marketId, belief, collateral, numBuckets, undefined, { signal: controller.signal });
+      const result = await previewPayoutCurve(client, marketId, belief, collateral, numBuckets, undefined, {
+        signal: controller.signal,
+        lowerBound: config?.lowerBound,
+        upperBound: config?.upperBound,
+      });
       return result;
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') throw err;

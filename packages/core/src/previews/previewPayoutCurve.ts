@@ -22,7 +22,7 @@ export async function previewPayoutCurve(
   collateral: number,
   numBuckets: number,
   numOutcomes?: number,
-  options?: { signal?: AbortSignal },
+  options?: { signal?: AbortSignal; lowerBound?: number; upperBound?: number },
 ): Promise<PayoutCurve> {
   validateBeliefVector(belief, numBuckets);
 
@@ -46,16 +46,22 @@ export async function previewPayoutCurve(
   if (data.max_payout_outcome == null) throw new Error('Missing max_payout_outcome in payout curve response');
   if (data.collateral == null) throw new Error('Missing collateral in payout curve response');
 
+  // New API emits `outcome` normalized to [0, 1]. When bounds are supplied, rescale to market units
+  // so downstream chart code (which compares against point.x in [lowerBound, upperBound]) keeps working.
+  const lo = options?.lowerBound;
+  const hi = options?.upperBound;
+  const denorm = (o: number) => (lo != null && hi != null ? lo + o * (hi - lo) : o);
+
   const projections = data.projections ?? [];
   return {
     // API response uses "projections" -- remapped to "previews" in SDK types
     previews: projections.map((p: any) => ({
-      outcome: p.outcome,
+      outcome: denorm(p.outcome),
       payout: p.payout,
       profitLoss: p.profit_loss,
     })),
     maxPayout: data.max_payout,
-    maxPayoutOutcome: data.max_payout_outcome,
+    maxPayoutOutcome: denorm(data.max_payout_outcome),
     inputCollateral: data.collateral,
   };
 }

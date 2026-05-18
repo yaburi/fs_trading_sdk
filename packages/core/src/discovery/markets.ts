@@ -16,14 +16,14 @@ export async function discoverMarkets(
   const items = Array.isArray(data.markets) ? data.markets : [];
 
   const mapped: MarketState[] = items.map((item: any) => {
-    if (item.alpha_vector == null) throw new Error('Missing alpha_vector in market list item');
-    const alphaVector: number[] = item.alpha_vector;
+    const rawVector: number[] | undefined = item.state_vector ?? item.alpha_vector;
+    if (rawVector == null) throw new Error('Missing state_vector in market list item');
+    const alphaVector: number[] = rawVector;
     const totalMass = alphaVector.reduce((a: number, b: number) => a + b, 0);
     const consensus = totalMass > 0
       ? alphaVector.map((a: number) => a / totalMass)
       : alphaVector.map(() => 0);
-    const mp = item.market_model_params;
-    if (!mp) throw new Error('Missing market_model_params in market list item');
+    const mp = item.market_model_params ?? {};
 
     const numBuckets = item.num_buckets;
     if (numBuckets == null) throw new Error('Missing num_buckets in market list item');

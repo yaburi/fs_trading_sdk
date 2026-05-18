@@ -645,29 +645,16 @@ describe('queryMarketState', () => {
     expect(result.title).toBe('Root Title');
   });
 
-  it('throws when alpha_vector is missing', async () => {
-    const rawWithoutAlpha = { ...mockMarketStateRaw, alpha_vector: undefined };
+  it('throws when state_vector is missing', async () => {
+    const rawWithoutVector = { ...mockMarketStateRaw, alpha_vector: undefined, state_vector: undefined };
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve(rawWithoutAlpha),
+      json: () => Promise.resolve(rawWithoutVector),
     });
 
     const client = makeMockClient();
     await expect(queryMarketState(client, '123')).rejects.toThrow(
-      'Missing alpha_vector',
-    );
-  });
-
-  it('throws when market_model_params is missing', async () => {
-    const rawWithoutMMP = { ...mockMarketStateRaw, market_model_params: undefined };
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(rawWithoutMMP),
-    });
-
-    const client = makeMockClient();
-    await expect(queryMarketState(client, '123')).rejects.toThrow(
-      'Missing market_model_params',
+      'Missing state_vector',
     );
   });
 
@@ -1682,39 +1669,22 @@ describe('discoverMarkets', () => {
     );
   });
 
-  it('throws when alpha_vector is missing from list item', async () => {
-    const rawWithoutAlpha = {
+  it('throws when state_vector is missing from list item', async () => {
+    const rawWithoutVector = {
       markets: [{
         ...mockDiscoverMarketsRaw.markets[0],
         alpha_vector: undefined,
+        state_vector: undefined,
       }],
     };
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve(rawWithoutAlpha),
+      json: () => Promise.resolve(rawWithoutVector),
     });
 
     const client = makeMockClient();
     await expect(discoverMarkets(client)).rejects.toThrow(
-      'Missing alpha_vector in market list item',
-    );
-  });
-
-  it('throws when market_model_params is missing from list item', async () => {
-    const rawWithoutMMP = {
-      markets: [{
-        ...mockDiscoverMarketsRaw.markets[0],
-        market_model_params: undefined,
-      }],
-    };
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(rawWithoutMMP),
-    });
-
-    const client = makeMockClient();
-    await expect(discoverMarkets(client)).rejects.toThrow(
-      'Missing market_model_params in market list item',
+      'Missing state_vector in market list item',
     );
   });
 

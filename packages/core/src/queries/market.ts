@@ -13,14 +13,14 @@ export async function queryMarketState(
 ): Promise<MarketState> {
   const data = await client.get<any>(`/api/views/markets/${marketId}`, undefined, options?.signal);
 
-  if (data.alpha_vector == null) throw new Error('Missing alpha_vector in market response');
-  const alphaVector: number[] = data.alpha_vector;
+  const rawVector: number[] | undefined = data.state_vector ?? data.alpha_vector;
+  if (rawVector == null) throw new Error('Missing state_vector in market response');
+  const alphaVector: number[] = rawVector;
   const totalMass = alphaVector.reduce((a: number, b: number) => a + b, 0);
   const consensus = totalMass > 0
     ? alphaVector.map((a: number) => a / totalMass)
     : alphaVector.map(() => 0);
-  const mp = data.market_model_params;
-  if (!mp) throw new Error('Missing market_model_params in market response');
+  const mp = data.market_model_params ?? {};
 
   const numBuckets = data.num_buckets;
   if (numBuckets == null) throw new Error('Missing num_buckets in market response');
