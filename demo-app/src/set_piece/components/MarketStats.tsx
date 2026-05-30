@@ -49,6 +49,11 @@ export function MarketStats({ market, size = 'md' }: MarketStatsProps) {
   return (
     <div
       style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'baseline',
+        columnGap: '8px',
+        rowGap: '2px',
         fontSize,
         color: 'var(--sp-text-secondary)',
         lineHeight: 1.45,
@@ -56,7 +61,7 @@ export function MarketStats({ market, size = 'md' }: MarketStatsProps) {
     >
       {consensus && (
         <>
-          <span>
+          <span style={{ whiteSpace: 'nowrap' }}>
             <span className="sp-uppercase" style={{ marginRight: '6px' }}>
               Consensus
             </span>
@@ -65,15 +70,12 @@ export function MarketStats({ market, size = 'md' }: MarketStatsProps) {
             </span>
             {units && <span style={{ marginLeft: '4px' }}>{units}</span>}
           </span>
-          <span
-            aria-hidden="true"
-            style={{ margin: '0 8px', opacity: 0.55 }}
-          >
+          <span aria-hidden="true" style={{ opacity: 0.55 }}>
             ·
           </span>
         </>
       )}
-      <span>
+      <span style={{ whiteSpace: 'nowrap' }}>
         <span className="sp-uppercase" style={{ marginRight: '6px' }}>
           Range
         </span>

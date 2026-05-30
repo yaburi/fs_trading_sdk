@@ -79,7 +79,6 @@ export function PageShell({ children, header, footer }: PageShellProps) {
           maxWidth: 'var(--sp-max-width)',
           display: 'flex',
           flexDirection: 'column',
-          gap: '20px',
         }}
         initial={{ opacity: 0, y: yOffset }}
         animate={{ opacity: 1, y: 0 }}

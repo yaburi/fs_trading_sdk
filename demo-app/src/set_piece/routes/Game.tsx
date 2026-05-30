@@ -2,6 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth, useBuy, useConsensus, useMarket, usePreviewPayout } from '@functionspace/react';
 import type { PayoutCurve } from '@functionspace/core';
+import { InfoCircle as InfoCircleIcon } from 'iconoir-react';
+
+// iconoir-react ships React 19 typings while this app uses React 18; the
+// ref-attribute shapes are subtly different. Cast to a loose component to
+// sidestep that — the build smoke test verifies the render.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const InfoCircle = InfoCircleIcon as any;
 import { PageShell } from '../components/PageShell';
 import { Header } from '../components/Header';
 import { Card } from '../components/Card';
@@ -49,12 +56,18 @@ export default function Game() {
       await buy.execute(composed.vector, round.stake);
       setCelebrating(true);
       refreshUser().catch(() => { });
-      // Hold the celebration for ~1.5s so the spring + GOOOAL! lands, then
-      // navigate to the /calls list which acts as the receipt.
+      // Hold the headline for ~1.3s, then flip `celebrating` so AnimatePresence
+      // can run its exit. Without this stagger the parent unmounts on navigate
+      // while `visible` is still true, so the exit animation never plays and
+      // the headline appears to vanish abruptly (sometimes leaving a frame of
+      // the backdrop-filter visible on the next route).
       setTimeout(() => {
-        round.resetKicks();
-        navigate('/calls');
-      }, 1500);
+        setCelebrating(false);
+        setTimeout(() => {
+          round.resetKicks();
+          navigate('/calls');
+        }, 220);
+      }, 1300);
     } catch {
       // Surface the error in the footer; the celebration won't trigger.
     } finally {
@@ -157,15 +170,17 @@ export default function Game() {
     engine.state === 'landed';
 
   // Three numbers from the curves:
-  //  - expected: ∫ belief(x) · payout(x) dx -- probability-weighted payout
-  //    under the user's own belief. Note: uses the user's belief, so a
-  //    contrarian "chasing thin-crowd zones" bet can self-confirm a big
-  //    Expected. The alignment metric below counterbalances that.
-  //  - bestCase: global ceiling, straight from the server.
+  //  - median: payout at the median of the user's belief PDF. Robust to
+  //    long-tail blowups (markets with floor:false can have payouts of
+  //    1000x+ on near-zero-probability outcomes, which destroys a naive
+  //    mean-of-payout integral).
+  //  - bestCase: global ceiling, straight from the server. Paired with
+  //    impliedProb (= stake / bestCase) so the user sees both the dollar
+  //    ceiling and how unlikely hitting it is.
   //  - crowdAlignment: Bhattacharyya coefficient between the user's belief
   //    and the crowd's belief. Bounded [0, 1]. Tells the user how much their
   //    bet actually overlaps with where the market thinks the outcome will
-  //    land -- a low number flags a contrarian bet even when Expected is fat.
+  //    land -- a low number flags a contrarian bet.
   const payoutSummary = useMemo(() => {
     if (!payout || !composed) return null;
     if (!payout.previews || payout.previews.length === 0) return null;
@@ -185,25 +200,37 @@ export default function Game() {
       return last.payout;
     };
 
-    // Trapezoidal integration of payout(x) · belief(x) dx over the user's
-    // belief PDF. evaluateDensityCurve's analytical scale slightly mis-
-    // normalizes for non-uniform coefficients (boundary B-spline basis
-    // functions are truncated, so a single interior bucket integrates to
-    // (K+2)/K instead of 1), so divide by the belief's own trapezoid mass
-    // to guarantee expected <= max(payout).
+    // Walk the user's belief PDF cumulatively (trapezoidal) and find the x
+    // where half the mass sits to the left. Payout at that x is the median
+    // payout under the user's belief.
     const pts = composed.curve.points;
-    let expected = 0;
     let beliefMass = 0;
     for (let i = 1; i < pts.length; i++) {
-      const a = pts[i - 1];
-      const b = pts[i];
-      const dx = b.x - a.x;
-      const ga = payoutAt(a.x) * a.y;
-      const gb = payoutAt(b.x) * b.y;
-      expected += ((ga + gb) / 2) * dx;
-      beliefMass += ((a.y + b.y) / 2) * dx;
+      beliefMass += ((pts[i - 1].y + pts[i].y) / 2) * (pts[i].x - pts[i - 1].x);
     }
-    if (beliefMass > 0) expected /= beliefMass;
+    let median = payoutAt(pts[0].x);
+    if (beliefMass > 0) {
+      const target = beliefMass / 2;
+      let cum = 0;
+      for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1];
+        const b = pts[i];
+        const segMass = ((a.y + b.y) / 2) * (b.x - a.x);
+        if (cum + segMass >= target) {
+          const frac = segMass > 0 ? (target - cum) / segMass : 0;
+          const medianX = a.x + frac * (b.x - a.x);
+          median = payoutAt(medianX);
+          break;
+        }
+        cum += segMass;
+      }
+    }
+
+    // Implied probability of the best-case outcome. For a scoring-rule
+    // market the payout multiplier at a single outcome is roughly the
+    // reciprocal of the consensus probability there, so stake/maxPayout
+    // is a faithful proxy for how unlikely the ceiling is.
+    const impliedProb = payout.maxPayout > 0 ? round.stake / payout.maxPayout : 0;
 
     // Bhattacharyya coefficient: ∫ √(user(x) · crowd(x)) dx. Both PDFs are
     // sampled by evaluateDensityCurve on the same uniform grid, so we can
@@ -221,15 +248,15 @@ export default function Game() {
       crowdAlignment = Math.max(0, Math.min(1, bc));
     }
 
-    return { expected, bestCase: payout.maxPayout, crowdAlignment };
-  }, [payout, composed, consensus]);
+    return { median, bestCase: payout.maxPayout, impliedProb, crowdAlignment };
+  }, [payout, composed, consensus, round.stake]);
 
-  // Color the expected figure by direction vs stake so the user can see win
+  // Color the median figure by direction vs stake so the user can see win
   // vs loss without an inline delta. Threshold cents so a near-break-even bet
   // reads as neutral text instead of pseudo-positive.
-  const expectedColor = useMemo(() => {
+  const medianColor = useMemo(() => {
     if (!payoutSummary) return 'var(--sp-text)';
-    const delta = payoutSummary.expected - round.stake;
+    const delta = payoutSummary.median - round.stake;
     if (delta > 0.05) return 'var(--sp-positive)';
     if (delta < -0.05) return 'var(--sp-negative)';
     return 'var(--sp-text)';
@@ -261,7 +288,10 @@ export default function Game() {
     <PageShell
       header={<Header onBack={() => navigate(-1)} centerLabel="Free kick" />}
       footer={
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div
+          className="sp-game-footer-actions"
+          style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}
+        >
           {buy.error && (
             <div
               style={{
@@ -286,6 +316,7 @@ export default function Game() {
             variant="primary"
             size="lg"
             fullWidth
+            className="sp-game-pill-lg"
             disabled={primaryDisabled}
             onClick={engine.primaryAction}
           >
@@ -301,6 +332,7 @@ export default function Game() {
               variant="ghost"
               size="md"
               fullWidth
+              className="sp-game-pill-md"
               disabled={!canFinalize}
               onClick={handleClear}
             >
@@ -310,6 +342,7 @@ export default function Game() {
               variant="secondary"
               size="md"
               fullWidth
+              className="sp-game-pill-md"
               disabled={!canFinalize}
               onClick={handleSubmit}
             >
@@ -433,10 +466,10 @@ export default function Game() {
                       </span>
                     </SummaryCell>
 
-                    <SummaryCell label="Expected" align="center">
+                    <SummaryCell label="Median payout" align="center">
                       {payoutSummary ? (
-                        <span className="sp-mono" style={{ color: expectedColor }}>
-                          ${formatPayout(payoutSummary.expected)}
+                        <span className="sp-mono" style={{ color: medianColor }}>
+                          ${formatPayout(payoutSummary.median)}
                         </span>
                       ) : (
                         <span className="sp-secondary" style={{ fontSize: '14px' }}>
@@ -447,11 +480,19 @@ export default function Game() {
 
                     <SummaryCell label="Best case" align="right">
                       {payoutSummary ? (
-                        <span
-                          className="sp-mono"
-                          style={{ color: 'var(--sp-positive)' }}
-                        >
-                          ${formatPayout(payoutSummary.bestCase)}
+                        <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.1 }}>
+                          <span
+                            className="sp-mono"
+                            style={{ color: 'var(--sp-positive)' }}
+                          >
+                            ${formatPayout(payoutSummary.bestCase)}
+                          </span>
+                          <span
+                            className="sp-secondary"
+                            style={{ fontSize: '10px', marginTop: '2px' }}
+                          >
+                            {formatImpliedProb(payoutSummary.impliedProb)} implied
+                          </span>
                         </span>
                       ) : (
                         <span className="sp-secondary" style={{ fontSize: '14px' }}>
@@ -518,16 +559,7 @@ export default function Game() {
       </div>
 
       {/* Phase status / instruction line */}
-      <div
-        style={{
-          minHeight: '36px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          textAlign: 'center',
-          padding: '0 8px',
-        }}
-      >
+      <div className="sp-phase-hint">
         <PhaseHint
           state={engine.state}
           kicksTaken={round.kicks.length}
@@ -738,21 +770,7 @@ function ShotTypeChips({
             padding: 0,
           }}
         >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <circle cx="12" cy="12" r="9" />
-            <line x1="12" y1="11" x2="12" y2="16" />
-            <circle cx="12" cy="8" r="0.6" fill="currentColor" />
-          </svg>
+          <InfoCircle width={16} height={16} strokeWidth={1.8} aria-hidden="true" />
         </button>
       </div>
 
@@ -861,6 +879,13 @@ function formatPayout(value: number): string {
   if (value >= 100) return value.toFixed(0);
   if (value >= 10) return value.toFixed(1);
   return value.toFixed(2);
+}
+
+function formatImpliedProb(p: number): string {
+  if (!isFinite(p) || p <= 0) return '–';
+  if (p >= 0.01) return `${(p * 100).toFixed(1)}%`;
+  if (p >= 0.0001) return `${(p * 100).toFixed(2)}%`;
+  return `<0.01%`;
 }
 
 function SummaryCell({
